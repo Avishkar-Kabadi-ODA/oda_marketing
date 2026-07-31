@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <defs>
+    <linearGradient id="odaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4F46E5" />
+      <stop offset="100%" stop-color="#7C3AED" />
+    </linearGradient>
+  </defs>
+  <rect width="100" height="100" rx="22" fill="url(#odaGrad)" />
+  <path d="M30 45 L50 35 L50 65 L30 55 Z M50 40 L70 30 L70 70 L50 60 Z M75 42 A15 15 0 0 1 75 58" 
+        stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+  <circle cx="35" cy="50" r="3" fill="#FFFFFF" />
+</svg>

@@ -1,0 +1,201 @@
+{
+ "actions": [],
+ "autoname": "format:CI-{YYYY}-{#####}",
+ "creation": "2026-07-30 18:15:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "title",
+  "content_type",
+  "workflow_state",
+  "status",
+  "column_break_1",
+  "channel",
+  "planned_publish_date",
+  "actual_publish_date",
+  "assigned_owner",
+  "link_section",
+  "content_calendar",
+  "calendar_slot",
+  "column_break_2",
+  "content_brief",
+  "content_section",
+  "content_body",
+  "publication_url"
+ ],
+ "fields": [
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "in_global_search": 1,
+   "in_list_view": 1,
+   "label": "Title",
+   "reqd": 1
+  },
+  {
+   "fieldname": "content_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Content Type",
+   "options": "Blog Post\nSocial Post\nNewsletter\nCase Study\nVideo\nWebinar\nWhitepaper",
+   "reqd": 1
+  },
+  {
+   "fieldname": "workflow_state",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Workflow State",
+   "read_only": 1
+  },
+  {
+   "default": "Planned",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Planned\nBriefing\nDrafting\nIn Review\nRevisions\nApproved\nScheduled\nPublished"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "channel",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Channel",
+   "options": "LinkedIn\nTwitter/X\nWebsite\nEmail\nYouTube\nMedium"
+  },
+  {
+   "fieldname": "planned_publish_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Planned Publish Date"
+  },
+  {
+   "fieldname": "actual_publish_date",
+   "fieldtype": "Date",
+   "label": "Actual Publish Date"
+  },
+  {
+   "fieldname": "assigned_owner",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Assigned Owner",
+   "options": "User"
+  },
+  {
+   "fieldname": "link_section",
+   "fieldtype": "Section Break",
+   "label": "Calendar & Brief Reference"
+  },
+  {
+   "fieldname": "content_calendar",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Content Calendar",
+   "options": "Content Calendar"
+  },
+  {
+   "fieldname": "calendar_slot",
+   "fieldtype": "Data",
+   "label": "Calendar Slot ID"
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "content_brief",
+   "fieldtype": "Link",
+   "label": "Content Brief",
+   "options": "Content Brief"
+  },
+  {
+   "fieldname": "content_section",
+   "fieldtype": "Section Break",
+   "label": "Content Execution"
+  },
+  {
+   "fieldname": "content_body",
+   "fieldtype": "Text Editor",
+   "label": "Content Body / Copy"
+  },
+  {
+   "fieldname": "publication_url",
+   "fieldtype": "Data",
+   "label": "Publication URL"
+  }
+ ],
+ "icon": "list-checks",
+ "idx": 0,
+ "links": [],
+ "modified": "2026-07-30 18:15:00",
+ "modified_by": "Administrator",
+ "module": "ODA Marketing",
+ "name": "Content Item",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Marketing Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Marketing Lead",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Marketing User",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "search_fields": "title, content_type, channel",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "title",
+ "track_changes": 1,
+ "track_seen": 1
+}

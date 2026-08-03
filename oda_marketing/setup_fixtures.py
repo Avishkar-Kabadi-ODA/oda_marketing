@@ -2,13 +2,15 @@
 # For license information, please see license.txt
 
 import frappe
+from frappe.utils import add_days, getdate
 
 
 def setup_roles():
 	roles = [
-		{"role_name": "Marketing User", "desk_access": 1},
 		{"role_name": "Marketing Lead", "desk_access": 1},
-		{"role_name": "Marketing Manager", "desk_access": 1},
+		{"role_name": "Content Writer", "desk_access": 1},
+		{"role_name": "Technical Reviewer", "desk_access": 1},
+		{"role_name": "Business Reviewer", "desk_access": 1},
 	]
 	for r in roles:
 		if not frappe.db.exists("Role", r["role_name"]):
@@ -21,10 +23,85 @@ def setup_roles():
 			print(f"Created Role: {r['role_name']}")
 
 
+def setup_test_users():
+	test_users = [
+		{"email": "lead.test@oda.local", "first_name": "Marketing", "last_name": "Lead Test", "role": "Marketing Lead"},
+		{"email": "writer.test@oda.local", "first_name": "Content", "last_name": "Writer Test", "role": "Content Writer"},
+		{"email": "techrev.test@oda.local", "first_name": "Technical", "last_name": "Reviewer Test", "role": "Technical Reviewer"},
+		{"email": "bizrev.test@oda.local", "first_name": "Business", "last_name": "Reviewer Test", "role": "Business Reviewer"},
+	]
+	for u in test_users:
+		if not frappe.db.exists("User", u["email"]):
+			user = frappe.get_doc({
+				"doctype": "User",
+				"email": u["email"],
+				"first_name": u["first_name"],
+				"last_name": u["last_name"],
+				"enabled": 1,
+				"send_welcome_email": 0,
+				"user_type": "System User",
+				"roles": [
+					{"role": u["role"]}
+				]
+			})
+			user.insert(ignore_permissions=True)
+			from frappe.utils.password import update_password
+			update_password(u["email"], "Password123!")
+			print(f"Created User: {u['email']}")
+
+
+def setup_email_templates_and_settings():
+	templates = [
+		{
+			"name": "Marketing Writer Notification",
+			"subject": "[ASSIGNMENT / REVISION] Task Update for '{{ doc.title }}'",
+			"response": "<p>Hello {{ doc.assigned_to }},</p><p>Your marketing task <b>{{ doc.title }}</b> status has updated to: <b>{{ doc.workflow_state }}</b>.</p><p>{% if doc.revision_feedback_notes %}<b>Feedback Notes:</b> {{ doc.revision_feedback_notes }}<br>{% endif %}Please log into the portal to complete the deliverable.</p>"
+		},
+		{
+			"name": "Marketing Reviewer Notification",
+			"subject": "[REVIEW REQUIRED] {{ doc.workflow_state }} for '{{ doc.title }}'",
+			"response": "<p>Hello Reviewer,</p><p>The deliverable <b>{{ doc.title }}</b> ({{ doc.content_type }}) requires your signoff for status: <b>{{ doc.workflow_state }}</b>.</p><p>Content File: {{ doc.content_file or 'Attached in document' }}<br>SLA Due Date: {{ doc.sla_due_date }}</p><p>Please log into the portal to review and approve or request revisions.</p>"
+		},
+		{
+			"name": "Marketing Publisher Notification",
+			"subject": "[READY TO PUBLISH] Deliverable '{{ doc.title }}' Approved",
+			"response": "<p>Hello Marketing Lead,</p><p>Great news! The deliverable <b>{{ doc.title }}</b> has passed both Technical and Business reviews and is marked <b>Approved</b> for final publishing.</p>"
+		},
+		{
+			"name": "Marketing Overdue SLA Alert",
+			"subject": "[OVERDUE ALERT] Deliverable '{{ doc.title }}' Exceeded SLA Date",
+			"response": "<p><b>URGENT:</b> Content deliverable <b>{{ doc.title }}</b> (Planned Publish Date: {{ doc.planned_publish_date }}) has passed its SLA Due Date ({{ doc.sla_due_date }}).</p><p>Please expedite processing immediately.</p>"
+		}
+	]
+
+	for t in templates:
+		if not frappe.db.exists("Email Template", t["name"]):
+			et = frappe.get_doc({
+				"doctype": "Email Template",
+				"name": t["name"],
+				"subject": t["subject"],
+				"response": t["response"],
+				"use_html": 1
+			})
+			et.insert(ignore_permissions=True)
+			print(f"Created Email Template: {t['name']}")
+
+	# Pre-populate Marketing Settings Single DocType
+	settings = frappe.get_single("Marketing Settings")
+	settings.enable_email_notifications = 1
+	settings.enable_auto_overdue_flag = 1
+	settings.writer_email_template = "Marketing Writer Notification"
+	settings.reviewer_email_template = "Marketing Reviewer Notification"
+	settings.publisher_email_template = "Marketing Publisher Notification"
+	settings.overdue_sla_email_template = "Marketing Overdue SLA Alert"
+	settings.save(ignore_permissions=True)
+	print("Pre-populated Marketing Settings with default templates.")
+
+
 def setup_workflow_states_and_actions():
 	state_names = [
-		"Planned", "Briefing", "Drafting", "In Review",
-		"Revisions", "Approved", "Scheduled", "Published"
+		"Planned", "Briefed", "In Progress", "In Review - Technical",
+		"In Review - Business", "In Revision", "Approved", "Published"
 	]
 	for state in state_names:
 		if not frappe.db.exists("Workflow State", state):
@@ -36,9 +113,9 @@ def setup_workflow_states_and_actions():
 			print(f"Created Workflow State: {state}")
 
 	action_names = [
-		"Start Briefing", "Submit Brief", "Submit for Review",
-		"Request Changes", "Approve Content", "Resubmit Draft",
-		"Schedule Content", "Publish Content"
+		"Issue Brief", "Accept Brief", "Submit for Technical Review",
+		"Request Changes", "Approve Technical", "Approve Business",
+		"Resubmit Draft", "Publish"
 	]
 	for action in action_names:
 		if not frappe.db.exists("Workflow Action Master", action):
@@ -58,58 +135,26 @@ def setup_workflow():
 		frappe.delete_doc("Workflow", workflow_name, force=True, ignore_permissions=True)
 
 	states = [
-		{"state": "Planned", "doc_status": "0", "allow_edit": "Marketing User", "style": "Primary"},
-		{"state": "Briefing", "doc_status": "0", "allow_edit": "Marketing User", "style": "Info"},
-		{"state": "Drafting", "doc_status": "0", "allow_edit": "Marketing User", "style": "Warning"},
-		{"state": "In Review", "doc_status": "0", "allow_edit": "Marketing Lead", "style": "Warning"},
-		{"state": "Revisions", "doc_status": "0", "allow_edit": "Marketing User", "style": "Inverse"},
-		{"state": "Approved", "doc_status": "0", "allow_edit": "Marketing Manager", "style": "Success"},
-		{"state": "Scheduled", "doc_status": "0", "allow_edit": "Marketing Manager", "style": "Info"},
-		{"state": "Published", "doc_status": "0", "allow_edit": "Marketing Manager", "style": "Success"},
+		{"state": "Planned", "doc_status": "0", "allow_edit": "Marketing Lead", "style": "Primary"},
+		{"state": "Briefed", "doc_status": "0", "allow_edit": "Content Writer", "style": "Info"},
+		{"state": "In Progress", "doc_status": "0", "allow_edit": "Content Writer", "style": "Warning"},
+		{"state": "In Review - Technical", "doc_status": "0", "allow_edit": "Technical Reviewer", "style": "Warning"},
+		{"state": "In Review - Business", "doc_status": "0", "allow_edit": "Business Reviewer", "style": "Warning"},
+		{"state": "In Revision", "doc_status": "0", "allow_edit": "Content Writer", "style": "Danger"},
+		{"state": "Approved", "doc_status": "0", "allow_edit": "Marketing Lead", "style": "Success"},
+		{"state": "Published", "doc_status": "0", "allow_edit": "Marketing Lead", "style": "Success"},
 	]
 
 	transitions = [
-		# Planned -> Briefing
-		{"state": "Planned", "action": "Start Briefing", "next_state": "Briefing", "allowed": "Marketing User"},
-		{"state": "Planned", "action": "Start Briefing", "next_state": "Briefing", "allowed": "Marketing Lead"},
-		{"state": "Planned", "action": "Start Briefing", "next_state": "Briefing", "allowed": "Marketing Manager"},
-		{"state": "Planned", "action": "Start Briefing", "next_state": "Briefing", "allowed": "System Manager"},
-
-		# Briefing -> Drafting
-		{"state": "Briefing", "action": "Submit Brief", "next_state": "Drafting", "allowed": "Marketing User"},
-		{"state": "Briefing", "action": "Submit Brief", "next_state": "Drafting", "allowed": "Marketing Lead"},
-		{"state": "Briefing", "action": "Submit Brief", "next_state": "Drafting", "allowed": "Marketing Manager"},
-		{"state": "Briefing", "action": "Submit Brief", "next_state": "Drafting", "allowed": "System Manager"},
-
-		# Drafting -> In Review
-		{"state": "Drafting", "action": "Submit for Review", "next_state": "In Review", "allowed": "Marketing User"},
-		{"state": "Drafting", "action": "Submit for Review", "next_state": "In Review", "allowed": "Marketing Lead"},
-		{"state": "Drafting", "action": "Submit for Review", "next_state": "In Review", "allowed": "Marketing Manager"},
-		{"state": "Drafting", "action": "Submit for Review", "next_state": "In Review", "allowed": "System Manager"},
-
-		# In Review -> Revisions
-		{"state": "In Review", "action": "Request Changes", "next_state": "Revisions", "allowed": "Marketing Lead"},
-		{"state": "In Review", "action": "Request Changes", "next_state": "Revisions", "allowed": "Marketing Manager"},
-		{"state": "In Review", "action": "Request Changes", "next_state": "Revisions", "allowed": "System Manager"},
-
-		# In Review -> Approved
-		{"state": "In Review", "action": "Approve Content", "next_state": "Approved", "allowed": "Marketing Lead"},
-		{"state": "In Review", "action": "Approve Content", "next_state": "Approved", "allowed": "Marketing Manager"},
-		{"state": "In Review", "action": "Approve Content", "next_state": "Approved", "allowed": "System Manager"},
-
-		# Revisions -> In Review
-		{"state": "Revisions", "action": "Resubmit Draft", "next_state": "In Review", "allowed": "Marketing User"},
-		{"state": "Revisions", "action": "Resubmit Draft", "next_state": "In Review", "allowed": "Marketing Lead"},
-		{"state": "Revisions", "action": "Resubmit Draft", "next_state": "In Review", "allowed": "Marketing Manager"},
-		{"state": "Revisions", "action": "Resubmit Draft", "next_state": "In Review", "allowed": "System Manager"},
-
-		# Approved -> Scheduled
-		{"state": "Approved", "action": "Schedule Content", "next_state": "Scheduled", "allowed": "Marketing Manager"},
-		{"state": "Approved", "action": "Schedule Content", "next_state": "Scheduled", "allowed": "System Manager"},
-
-		# Scheduled -> Published
-		{"state": "Scheduled", "action": "Publish Content", "next_state": "Published", "allowed": "Marketing Manager"},
-		{"state": "Scheduled", "action": "Publish Content", "next_state": "Published", "allowed": "System Manager"},
+		{"state": "Planned", "action": "Issue Brief", "next_state": "Briefed", "allowed": "Marketing Lead"},
+		{"state": "Briefed", "action": "Accept Brief", "next_state": "In Progress", "allowed": "Content Writer"},
+		{"state": "In Progress", "action": "Submit for Technical Review", "next_state": "In Review - Technical", "allowed": "Content Writer"},
+		{"state": "In Review - Technical", "action": "Request Changes", "next_state": "In Revision", "allowed": "Technical Reviewer"},
+		{"state": "In Review - Technical", "action": "Approve Technical", "next_state": "In Review - Business", "allowed": "Technical Reviewer"},
+		{"state": "In Review - Business", "action": "Request Changes", "next_state": "In Revision", "allowed": "Business Reviewer"},
+		{"state": "In Review - Business", "action": "Approve Business", "next_state": "Approved", "allowed": "Business Reviewer"},
+		{"state": "In Revision", "action": "Resubmit Draft", "next_state": "In Review - Technical", "allowed": "Content Writer"},
+		{"state": "Approved", "action": "Publish", "next_state": "Published", "allowed": "Marketing Lead"},
 	]
 
 	wf = frappe.get_doc({
@@ -133,12 +178,12 @@ def setup_kanban_board():
 
 	columns = [
 		{"column_name": "Planned", "status": "Active", "indicator": "Gray"},
-		{"column_name": "Briefing", "status": "Active", "indicator": "Light Blue"},
-		{"column_name": "Drafting", "status": "Active", "indicator": "Orange"},
-		{"column_name": "In Review", "status": "Active", "indicator": "Yellow"},
-		{"column_name": "Revisions", "status": "Active", "indicator": "Red"},
+		{"column_name": "Briefed", "status": "Active", "indicator": "Light Blue"},
+		{"column_name": "In Progress", "status": "Active", "indicator": "Orange"},
+		{"column_name": "In Review - Technical", "status": "Active", "indicator": "Yellow"},
+		{"column_name": "In Review - Business", "status": "Active", "indicator": "Purple"},
+		{"column_name": "In Revision", "status": "Active", "indicator": "Red"},
 		{"column_name": "Approved", "status": "Active", "indicator": "Cyan"},
-		{"column_name": "Scheduled", "status": "Active", "indicator": "Blue"},
 		{"column_name": "Published", "status": "Active", "indicator": "Green"},
 	]
 
@@ -154,6 +199,135 @@ def setup_kanban_board():
 	print(f"Created Kanban Board: {board_name}")
 
 
+def clear_and_seed_data():
+	print("Clearing old dummy records...")
+	frappe.db.delete("Content Brief")
+	frappe.db.delete("Content Item")
+	frappe.db.delete("Calendar Slot")
+	frappe.db.delete("Content Calendar")
+	frappe.db.commit()
+
+	cal_name = "2026 Global Marketing Operations Calendar"
+	cal = frappe.get_doc({
+		"doctype": "Content Calendar",
+		"calendar_name": cal_name,
+		"from_date": "2026-01-01",
+		"to_date": "2026-12-31",
+		"status": "Active",
+		"description": "Annual 2026 content calendar for Optimum Data Analytics covering HCLS, Pharma, Fintech, and AgTech verticals."
+	})
+	cal.insert(ignore_permissions=True)
+	print(f"Created Master Setup Calendar: {cal_name}")
+
+	# Realistic marketing content items
+	sample_items = [
+		{
+			"title": "AI-Driven Clinical Decision Support Systems in HCLS",
+			"content_type": "Blog",
+			"topic": "Exploring how GenAI models assist oncologists in personalized treatment planning.",
+			"practice_area": "HCLS",
+			"planned_publish_date": "2026-08-15",
+			"assigned_to": "writer.test@oda.local",
+			"reviewer_technical": "techrev.test@oda.local",
+			"reviewer_business": "bizrev.test@oda.local",
+			"target_state": "Published",
+			"published_url": "https://optimumdataanalytics.com/insights/ai-clinical-decision-support"
+		},
+		{
+			"title": "Real-Time Cold Chain Visibility in Pharma Supply Chains",
+			"content_type": "Blog",
+			"topic": "IoT sensors and predictive temperature logging for vaccine transport integrity.",
+			"practice_area": "Pharma Supply Chain",
+			"planned_publish_date": "2026-08-22",
+			"assigned_to": "writer.test@oda.local",
+			"reviewer_technical": "techrev.test@oda.local",
+			"reviewer_business": "bizrev.test@oda.local",
+			"target_state": "In Review - Technical"
+		},
+		{
+			"title": "Automated Commercial Loan Underwriting Workflow",
+			"content_type": "Flowchart",
+			"topic": "Step-by-step visual blueprint of AI document parsing in SME credit evaluation.",
+			"practice_area": "Fintech",
+			"planned_publish_date": "2026-08-28",
+			"assigned_to": "writer.test@oda.local",
+			"reviewer_technical": "techrev.test@oda.local",
+			"reviewer_business": "bizrev.test@oda.local",
+			"target_state": "In Progress"
+		},
+		{
+			"title": "Precision Agriculture: Crop Yield Prediction Architecture",
+			"content_type": "Carousel",
+			"topic": "5 key satellite imaging techniques for early drought detection.",
+			"practice_area": "Agriculture",
+			"planned_publish_date": "2026-09-05",
+			"assigned_to": "writer.test@oda.local",
+			"reviewer_technical": "techrev.test@oda.local",
+			"reviewer_business": "bizrev.test@oda.local",
+			"target_state": "Briefed"
+		},
+		{
+			"title": "Industry Poll: Key Bottlenecks in Drug Approval Timelines",
+			"content_type": "Poll",
+			"topic": "Interactive LinkedIn poll assessing regulatory submission challenges in 2026.",
+			"practice_area": "Pharma Supply Chain",
+			"planned_publish_date": "2026-09-10",
+			"assigned_to": "writer.test@oda.local",
+			"reviewer_technical": "techrev.test@oda.local",
+			"reviewer_business": "bizrev.test@oda.local",
+			"target_state": "Planned"
+		},
+		{
+			"title": "Cross-Domain Agentic Workflows for Enterprise Analytics",
+			"content_type": "Blog",
+			"topic": "Architectural breakdown of multi-agent orchestration engines.",
+			"practice_area": "Cross-domain",
+			"planned_publish_date": "2026-09-18",
+			"assigned_to": "writer.test@oda.local",
+			"reviewer_technical": "techrev.test@oda.local",
+			"reviewer_business": "bizrev.test@oda.local",
+			"target_state": "Planned"
+		}
+	]
+
+	for data in sample_items:
+		item = frappe.get_doc({
+			"doctype": "Content Item",
+			"title": data["title"],
+			"content_type": data["content_type"],
+			"topic": data["topic"],
+			"practice_area": data["practice_area"],
+			"content_calendar": cal_name,
+			"planned_publish_date": data["planned_publish_date"],
+			"assigned_to": data["assigned_to"],
+			"reviewer_technical": data["reviewer_technical"],
+			"reviewer_business": data["reviewer_business"],
+			"published_url": data.get("published_url", ""),
+			"owner": data["assigned_to"]
+		})
+		item.insert(ignore_permissions=True)
+
+		# Create linked brief for items
+		brief = frappe.get_doc({
+			"doctype": "Content Brief",
+			"content_item": item.name,
+			"outline": f"Detailed executive brief for topic: {data['title']}",
+			"target_audience": f"VPs and Directors in {data['practice_area']}",
+			"primary_keyword": data["practice_area"].lower() + " ai analytics",
+			"word_target": 1500,
+			"accepted_by_writer": 1 if data["target_state"] in ["In Progress", "In Review - Technical", "In Review - Business", "Approved", "Published"] else 0
+		})
+		brief.insert(ignore_permissions=True)
+
+		item.db_set("content_brief", brief.name)
+
+		if data["target_state"] != "Planned":
+			item.db_set("workflow_state", data["target_state"])
+
+	frappe.db.commit()
+	print(f"Seeded {len(sample_items)} realistic Content Items with briefs.")
+
+
 def setup_workspace_sidebar():
 	sidebar_name = "ODA Marketing"
 	if frappe.db.exists("Workspace Sidebar", sidebar_name):
@@ -162,8 +336,30 @@ def setup_workspace_sidebar():
 	items = [
 		{
 			"type": "Section Break",
-			"label": "Campaign Planning",
+			"label": "Content Execution",
+			"icon": "list-checks",
+			"collapsible": 0,
+		},
+		{
+			"type": "Link",
+			"link_type": "DocType",
+			"link_to": "Content Item",
+			"label": "Content Item",
 			"icon": "calendar",
+			"child": 0,
+		},
+		{
+			"type": "Link",
+			"link_type": "DocType",
+			"link_to": "Content Brief",
+			"label": "Content Brief",
+			"icon": "file-text",
+			"child": 0,
+		},
+		{
+			"type": "Section Break",
+			"label": "Setup",
+			"icon": "settings",
 			"collapsible": 1,
 		},
 		{
@@ -172,29 +368,15 @@ def setup_workspace_sidebar():
 			"link_to": "Content Calendar",
 			"label": "Content Calendar",
 			"icon": "calendar",
-			"child": 1,
-		},
-		{
-			"type": "Section Break",
-			"label": "Content Execution",
-			"icon": "list-checks",
-			"collapsible": 1,
+			"child": 0,
 		},
 		{
 			"type": "Link",
 			"link_type": "DocType",
-			"link_to": "Content Item",
-			"label": "Content Item",
-			"icon": "list-checks",
-			"child": 1,
-		},
-		{
-			"type": "Link",
-			"link_type": "DocType",
-			"link_to": "Content Brief",
-			"label": "Content Brief",
-			"icon": "file-text",
-			"child": 1,
+			"link_to": "Marketing Settings",
+			"label": "Marketing Settings",
+			"icon": "settings",
+			"child": 0,
 		},
 	]
 
@@ -212,7 +394,10 @@ def setup_workspace_sidebar():
 
 def run_setup():
 	setup_roles()
+	setup_test_users()
+	setup_email_templates_and_settings()
 	setup_workflow()
 	setup_kanban_board()
+	clear_and_seed_data()
 	setup_workspace_sidebar()
 	frappe.db.commit()

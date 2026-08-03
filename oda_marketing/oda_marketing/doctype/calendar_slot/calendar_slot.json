@@ -6,21 +6,23 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "slot_title",
+  "month",
   "content_type",
+  "topic",
+  "practice_area",
+  "assigned_to",
+  "reviewer_technical",
+  "reviewer_business",
   "planned_publish_date",
-  "channel",
-  "assigned_owner",
-  "target_audience",
-  "notes",
   "content_item"
  ],
  "fields": [
   {
-   "fieldname": "slot_title",
-   "fieldtype": "Data",
+   "fieldname": "month",
+   "fieldtype": "Select",
    "in_list_view": 1,
-   "label": "Slot Title",
+   "label": "Month",
+   "options": "January\nFebruary\nMarch\nApril\nMay\nJune\nJuly\nAugust\nSeptember\nOctober\nNovember\nDecember",
    "reqd": 1
   },
   {
@@ -28,8 +30,41 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Content Type",
-   "options": "Blog Post\nSocial Post\nNewsletter\nCase Study\nVideo\nWebinar\nWhitepaper",
+   "options": "Blog\nPoll\nFlowchart\nCarousel",
    "reqd": 1
+  },
+  {
+   "fieldname": "topic",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Topic",
+   "reqd": 1
+  },
+  {
+   "fieldname": "practice_area",
+   "fieldtype": "Select",
+   "label": "Practice Area",
+   "options": "HCLS\nPharma Supply Chain\nFintech\nAgriculture\nCross-domain"
+  },
+  {
+   "fieldname": "assigned_to",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Assigned To",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "fieldname": "reviewer_technical",
+   "fieldtype": "Link",
+   "label": "Technical Reviewer",
+   "options": "User"
+  },
+  {
+   "fieldname": "reviewer_business",
+   "fieldtype": "Link",
+   "label": "Business Reviewer",
+   "options": "User"
   },
   {
    "fieldname": "planned_publish_date",
@@ -39,35 +74,10 @@
    "reqd": 1
   },
   {
-   "fieldname": "channel",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "label": "Channel",
-   "options": "LinkedIn\nTwitter/X\nWebsite\nEmail\nYouTube\nMedium",
-   "reqd": 1
-  },
-  {
-   "fieldname": "assigned_owner",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Assigned Owner",
-   "options": "User"
-  },
-  {
-   "fieldname": "target_audience",
-   "fieldtype": "Data",
-   "label": "Target Audience"
-  },
-  {
-   "fieldname": "notes",
-   "fieldtype": "Small Text",
-   "label": "Notes"
-  },
-  {
    "fieldname": "content_item",
    "fieldtype": "Link",
    "in_list_view": 1,
-   "label": "Generated Content Item",
+   "label": "Content Item",
    "options": "Content Item",
    "read_only": 1
   }
@@ -75,7 +85,7 @@
  "idx": 0,
  "istable": 1,
  "links": [],
- "modified": "2026-07-30 18:15:00",
+ "modified": "2026-08-02 23:45:00",
  "modified_by": "Administrator",
  "module": "ODA Marketing",
  "name": "Calendar Slot",

@@ -1,31 +1,28 @@
 {
  "actions": [],
- "autoname": "format:CB-{YYYY}-{#####}",
+ "autoname": "naming_series:",
  "creation": "2026-07-30 18:15:00",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "brief_title",
+  "naming_series",
   "content_item",
-  "status",
+  "outline",
   "column_break_1",
-  "assigned_owner",
-  "target_audience_section",
   "target_audience",
-  "tone_and_style",
+  "primary_keyword",
+  "word_target",
   "column_break_2",
-  "core_message",
-  "content_section",
-  "key_takeaways",
-  "reference_links"
+  "accepted_by_writer",
+  "accepted_on"
  ],
  "fields": [
   {
-   "fieldname": "brief_title",
-   "fieldtype": "Data",
-   "in_global_search": 1,
-   "in_list_view": 1,
-   "label": "Brief Title",
+   "default": "MKT-BRIEF-.YYYY.-.####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Naming Series",
+   "options": "MKT-BRIEF-.YYYY.-.####",
    "reqd": 1
   },
   {
@@ -34,77 +31,60 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Content Item",
-   "options": "Content Item"
+   "options": "Content Item",
+   "reqd": 1,
+   "unique": 1
   },
   {
-   "default": "Draft",
-   "fieldname": "status",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Status",
-   "options": "Draft\nCompleted"
+   "fieldname": "outline",
+   "fieldtype": "Text Editor",
+   "label": "Outline"
   },
   {
    "fieldname": "column_break_1",
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "assigned_owner",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Assigned Owner",
-   "options": "User"
-  },
-  {
-   "fieldname": "target_audience_section",
-   "fieldtype": "Section Break",
-   "label": "Creative Requirements"
-  },
-  {
    "fieldname": "target_audience",
-   "fieldtype": "Small Text",
+   "fieldtype": "Data",
    "label": "Target Audience"
   },
   {
-   "fieldname": "tone_and_style",
+   "fieldname": "primary_keyword",
    "fieldtype": "Data",
-   "label": "Tone & Style"
+   "label": "Primary Keyword"
+  },
+  {
+   "default": "1200",
+   "fieldname": "word_target",
+   "fieldtype": "Int",
+   "label": "Word Target"
   },
   {
    "fieldname": "column_break_2",
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "core_message",
-   "fieldtype": "Text",
-   "label": "Core Message"
+   "default": "0",
+   "fieldname": "accepted_by_writer",
+   "fieldtype": "Check",
+   "label": "Accepted By Writer"
   },
   {
-   "fieldname": "content_section",
-   "fieldtype": "Section Break",
-   "label": "Details & Assets"
-  },
-  {
-   "fieldname": "key_takeaways",
-   "fieldtype": "Text Editor",
-   "label": "Key Takeaways / Outline"
-  },
-  {
-   "fieldname": "reference_links",
-   "fieldtype": "Text",
-   "label": "Reference Links & Assets"
+   "fieldname": "accepted_on",
+   "fieldtype": "Datetime",
+   "label": "Accepted On",
+   "read_only": 1
   }
  ],
  "icon": "octicon octicon-file-text",
  "idx": 0,
  "links": [],
- "modified": "2026-07-30 18:15:00",
+ "modified": "2026-08-03 00:30:00",
  "modified_by": "Administrator",
  "module": "ODA Marketing",
  "name": "Content Brief",
- "naming_rule": "Expression (old style)",
+ "naming_rule": "By \"Naming Series\" field",
  "owner": "Administrator",
  "permissions": [
   {
@@ -127,18 +107,6 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Marketing Manager",
-   "share": 1,
-   "write": 1
-  },
-  {
-   "create": 1,
-   "delete": 0,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
    "role": "Marketing Lead",
    "share": 1,
    "write": 1
@@ -151,13 +119,36 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Marketing User",
+   "role": "Content Writer",
    "share": 1,
    "write": 1
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Technical Reviewer",
+   "share": 1,
+   "write": 0
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Business Reviewer",
+   "share": 1,
+   "write": 0
   }
  ],
  "sort_field": "creation",
  "sort_order": "DESC",
- "states": [],
- "title_field": "brief_title"
+ "states": []
 }

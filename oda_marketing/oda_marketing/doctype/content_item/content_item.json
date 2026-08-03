@@ -1,29 +1,44 @@
 {
  "actions": [],
- "autoname": "format:CI-{YYYY}-{#####}",
+ "autoname": "naming_series:",
  "creation": "2026-07-30 18:15:00",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
+  "naming_series",
   "title",
-  "content_type",
-  "workflow_state",
   "status",
+  "content_type",
+  "topic",
+  "practice_area",
   "column_break_1",
-  "channel",
-  "planned_publish_date",
-  "actual_publish_date",
-  "assigned_owner",
-  "link_section",
   "content_calendar",
-  "calendar_slot",
-  "column_break_2",
-  "content_brief",
+  "planned_publish_date",
+  "assigned_to",
+  "reviewer_technical",
+  "reviewer_business",
   "content_section",
-  "content_body",
-  "publication_url"
+  "content_file",
+  "content_brief",
+  "column_break_2",
+  "sla_due_date",
+  "risk_flag",
+  "published_url",
+  "sharepoint_folder_url",
+  "feedback_section",
+  "revision_feedback_notes",
+  "notes_section",
+  "notes"
  ],
  "fields": [
+  {
+   "default": "MKT-ITEM-.YYYY.-.####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Naming Series",
+   "options": "MKT-ITEM-.YYYY.-.####",
+   "reqd": 1
+  },
   {
    "fieldname": "title",
    "fieldtype": "Data",
@@ -33,113 +48,159 @@
    "reqd": 1
   },
   {
-   "fieldname": "content_type",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Content Type",
-   "options": "Blog Post\nSocial Post\nNewsletter\nCase Study\nVideo\nWebinar\nWhitepaper",
-   "reqd": 1
-  },
-  {
-   "fieldname": "workflow_state",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Workflow State",
-   "read_only": 1
-  },
-  {
    "default": "Planned",
    "fieldname": "status",
    "fieldtype": "Select",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Status",
-   "options": "Planned\nBriefing\nDrafting\nIn Review\nRevisions\nApproved\nScheduled\nPublished"
+   "options": "Planned\nBriefed\nIn Progress\nIn Review - Technical\nIn Review - Business\nIn Revision\nApproved\nPublished",
+   "read_only": 1
+  },
+  {
+   "fieldname": "content_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Content Type",
+   "options": "Blog\nPoll\nFlowchart\nCarousel",
+   "reqd": 1
+  },
+  {
+   "fieldname": "topic",
+   "fieldtype": "Small Text",
+   "label": "Topic",
+   "reqd": 1
+  },
+  {
+   "fieldname": "practice_area",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Practice Area",
+   "options": "HCLS\nPharma Supply Chain\nFintech\nAgriculture\nCross-domain"
   },
   {
    "fieldname": "column_break_1",
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "channel",
-   "fieldtype": "Select",
+   "fieldname": "content_calendar",
+   "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Channel",
-   "options": "LinkedIn\nTwitter/X\nWebsite\nEmail\nYouTube\nMedium"
+   "label": "Content Calendar",
+   "options": "Content Calendar",
+   "reqd": 1
   },
   {
    "fieldname": "planned_publish_date",
    "fieldtype": "Date",
    "in_list_view": 1,
-   "label": "Planned Publish Date"
+   "label": "Planned Publish Date",
+   "reqd": 1
   },
   {
-   "fieldname": "actual_publish_date",
-   "fieldtype": "Date",
-   "label": "Actual Publish Date"
-  },
-  {
-   "fieldname": "assigned_owner",
+   "fieldname": "assigned_to",
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Assigned Owner",
+   "label": "Assigned To",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "fieldname": "reviewer_technical",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Technical Reviewer",
    "options": "User"
   },
   {
-   "fieldname": "link_section",
-   "fieldtype": "Section Break",
-   "label": "Calendar & Brief Reference"
-  },
-  {
-   "fieldname": "content_calendar",
+   "fieldname": "reviewer_business",
    "fieldtype": "Link",
    "in_standard_filter": 1,
-   "label": "Content Calendar",
-   "options": "Content Calendar"
+   "label": "Business Reviewer",
+   "options": "User"
   },
   {
-   "fieldname": "calendar_slot",
-   "fieldtype": "Data",
-   "label": "Calendar Slot ID"
+   "fieldname": "content_section",
+   "fieldtype": "Section Break",
+   "label": "Deliverable & Brief Reference"
+  },
+  {
+   "fieldname": "content_file",
+   "fieldtype": "Attach",
+   "in_list_view": 1,
+   "label": "Content File (PDF / DOCX / Image / TXT)"
+  },
+  {
+   "fieldname": "content_brief",
+   "fieldtype": "Link",
+   "label": "Linked Content Brief",
+   "options": "Content Brief",
+   "read_only": 1
   },
   {
    "fieldname": "column_break_2",
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "content_brief",
-   "fieldtype": "Link",
-   "label": "Content Brief",
-   "options": "Content Brief"
+   "fieldname": "sla_due_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "SLA Due Date",
+   "read_only": 1
   },
   {
-   "fieldname": "content_section",
-   "fieldtype": "Section Break",
-   "label": "Content Execution"
+   "default": "On track",
+   "fieldname": "risk_flag",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Risk Flag / SLA Status",
+   "options": "On track\nAt risk\nLate"
   },
   {
-   "fieldname": "content_body",
-   "fieldtype": "Text Editor",
-   "label": "Content Body / Copy"
-  },
-  {
-   "fieldname": "publication_url",
+   "fieldname": "published_url",
    "fieldtype": "Data",
-   "label": "Publication URL"
+   "label": "Published Asset URL",
+   "options": "URL"
+  },
+  {
+   "fieldname": "sharepoint_folder_url",
+   "fieldtype": "Data",
+   "label": "SharePoint Folder URL",
+   "options": "URL"
+  },
+  {
+   "fieldname": "feedback_section",
+   "fieldtype": "Section Break",
+   "label": "Reviewer Feedback & Revisions"
+  },
+  {
+   "fieldname": "revision_feedback_notes",
+   "fieldtype": "Small Text",
+   "label": "Revision Feedback / Notes"
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Notes & Working Draft Copy"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Text Editor",
+   "label": "Notes"
   }
  ],
  "icon": "list-checks",
  "idx": 0,
  "links": [],
- "modified": "2026-07-30 18:15:00",
+ "modified": "2026-08-03 07:45:00",
  "modified_by": "Administrator",
  "module": "ODA Marketing",
  "name": "Content Item",
- "naming_rule": "Expression (old style)",
+ "naming_rule": "By \"Naming Series\" field",
  "owner": "Administrator",
  "permissions": [
   {
@@ -162,18 +223,6 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Marketing Manager",
-   "share": 1,
-   "write": 1
-  },
-  {
-   "create": 1,
-   "delete": 0,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
    "role": "Marketing Lead",
    "share": 1,
    "write": 1
@@ -186,15 +235,72 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Marketing User",
+   "role": "Content Writer",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Technical Reviewer",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Business Reviewer",
    "share": 1,
    "write": 1
   }
  ],
- "search_fields": "title, content_type, channel",
- "sort_field": "creation",
+ "search_fields": "title, content_type, topic, status",
+ "sort_field": "planned_publish_date",
  "sort_order": "DESC",
- "states": [],
+ "states": [
+  {
+   "color": "Gray",
+   "title": "Planned"
+  },
+  {
+   "color": "Blue",
+   "title": "Briefed"
+  },
+  {
+   "color": "Orange",
+   "title": "In Progress"
+  },
+  {
+   "color": "Yellow",
+   "title": "In Review - Technical"
+  },
+  {
+   "color": "Purple",
+   "title": "In Review - Business"
+  },
+  {
+   "color": "Red",
+   "title": "In Revision"
+  },
+  {
+   "color": "Cyan",
+   "title": "Approved"
+  },
+  {
+   "color": "Green",
+   "title": "Published"
+  }
+ ],
  "title_field": "title",
  "track_changes": 1,
  "track_seen": 1

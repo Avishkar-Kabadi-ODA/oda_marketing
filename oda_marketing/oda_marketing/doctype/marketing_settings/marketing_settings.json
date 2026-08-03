@@ -1,0 +1,123 @@
+{
+ "actions": [],
+ "creation": "2026-08-03 08:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "email_notifications_section",
+  "enable_email_notifications",
+  "enable_auto_overdue_flag",
+  "column_break_1",
+  "default_content_calendar",
+  "templates_section",
+  "writer_email_template",
+  "reviewer_email_template",
+  "column_break_2",
+  "publisher_email_template",
+  "overdue_sla_email_template"
+ ],
+ "fields": [
+  {
+   "fieldname": "email_notifications_section",
+   "fieldtype": "Section Break",
+   "label": "Master Switches & Operational Defaults"
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_email_notifications",
+   "fieldtype": "Check",
+   "label": "Enable Email Notifications"
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_auto_overdue_flag",
+   "fieldtype": "Check",
+   "label": "Enable Automatic Overdue SLA Flagging"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "default_content_calendar",
+   "fieldtype": "Link",
+   "label": "Default Content Calendar",
+   "options": "Content Calendar"
+  },
+  {
+   "fieldname": "templates_section",
+   "fieldtype": "Section Break",
+   "label": "Mandatory Email Templates Configuration"
+  },
+  {
+   "fieldname": "writer_email_template",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Writer Email Template",
+   "options": "Email Template"
+  },
+  {
+   "fieldname": "reviewer_email_template",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Reviewer Email Template",
+   "options": "Email Template"
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "publisher_email_template",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Publisher Email Template",
+   "options": "Email Template"
+  },
+  {
+   "fieldname": "overdue_sla_email_template",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Overdue SLA Escalation Template",
+   "options": "Email Template"
+  }
+ ],
+ "icon": "settings",
+ "idx": 0,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-08-03 08:00:00",
+ "modified_by": "Administrator",
+ "module": "ODA Marketing",
+ "name": "Marketing Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Marketing Lead",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

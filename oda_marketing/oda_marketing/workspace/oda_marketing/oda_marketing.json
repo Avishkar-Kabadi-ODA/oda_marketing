@@ -1,7 +1,7 @@
 {
  "app": "oda_marketing",
  "charts": [],
- "content": "[{\"id\":\"header_1\",\"type\":\"header\",\"data\":{\"text\":\"ODA Marketing Operations\",\"level\":2}},{\"id\":\"shortcut_1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Content Calendar\",\"col\":4}},{\"id\":\"shortcut_2\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Content Pipeline (Kanban)\",\"col\":4}},{\"id\":\"shortcut_3\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Content Brief\",\"col\":4}}]",
+ "content": "[{\"id\":\"header_1\",\"type\":\"header\",\"data\":{\"text\":\"ODA Marketing Operations\",\"level\":2}},{\"id\":\"shortcut_1\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Content Calendar View\",\"col\":4}},{\"id\":\"shortcut_2\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Content Pipeline (Kanban)\",\"col\":4}},{\"id\":\"shortcut_3\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Marketing Settings\",\"col\":4}}]",
  "creation": "2026-07-30 18:20:00",
  "custom_blocks": [],
  "docstatus": 0,
@@ -16,12 +16,11 @@
   {
    "hidden": 0,
    "is_query_report": 0,
-   "label": "Content Calendar",
+   "label": "Content Execution",
    "link_count": 0,
-   "link_to": "Content Calendar",
-   "link_type": "DocType",
+   "link_type": "Card Break",
    "onboard": 0,
-   "type": "Link"
+   "type": "Card Break"
   },
   {
    "hidden": 0,
@@ -42,9 +41,38 @@
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Setup",
+   "link_count": 0,
+   "link_type": "Card Break",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Content Calendar",
+   "link_count": 0,
+   "link_to": "Content Calendar",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Marketing Settings",
+   "link_count": 0,
+   "link_to": "Marketing Settings",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
   }
  ],
- "modified": "2026-07-30 18:20:00",
+ "modified": "2026-08-03 08:00:00",
  "modified_by": "Administrator",
  "module": "ODA Marketing",
  "name": "ODA Marketing",
@@ -59,10 +87,10 @@
  "shortcuts": [
   {
    "color": "Grey",
-   "doc_view": "List",
+   "doc_view": "Calendar",
    "icon": "calendar",
-   "label": "Content Calendar",
-   "link_to": "Content Calendar",
+   "label": "Content Calendar View",
+   "link_to": "Content Item",
    "type": "DocType"
   },
   {
@@ -76,10 +104,10 @@
   },
   {
    "color": "Grey",
-   "doc_view": "List",
-   "icon": "file-text",
-   "label": "Content Brief",
-   "link_to": "Content Brief",
+   "doc_view": "Form",
+   "icon": "settings",
+   "label": "Marketing Settings",
+   "link_to": "Marketing Settings",
    "type": "DocType"
   }
  ],

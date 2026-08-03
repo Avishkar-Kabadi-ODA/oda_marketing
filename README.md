@@ -13,9 +13,10 @@ bench --site marketing.localhost install-app oda_marketing
 bench --site marketing.localhost execute oda_marketing.setup_fixtures.run_setup
 ```
 
-### Documentation & Development Guide
+### Documentation
 
-For complete developer instructions on how to create fields, build new DocTypes, link fields, configure email settings, and execute migrations, see the [Development Guide](file:///home/user/frappe-bench/apps/oda_marketing/development-guide.md).
+- [System Architecture & Operational Flow](file:///home/user/frappe-bench/apps/oda_marketing/app-architecture-and-flow.md): Detailed explanation of DocTypes, workflow state machine, user involvement security, and automated email engine.
+- [Development & Customization Guide](file:///home/user/frappe-bench/apps/oda_marketing/development-guide.md): Developer guide for creating fields, DocTypes, linking fields, and running migrations.
 
 ### Contributing
 

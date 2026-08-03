@@ -6,7 +6,7 @@ This document explains the current system architecture, data model, user roles, 
 
 ## 1. Overview & Core Architecture
 
-The ODA Marketing platform manages the end-to-end lifecycle of enterprise marketing deliverables (Blogs, Polls, Flowcharts, Carousels). It provides structured planning, mandatory content brief gates, attachment requirement rules, multi-stage sequential reviews, mandatory feedback tracking, strict role permission controls, default publisher settings, and automated SLA email alerts.
+The ODA Marketing platform manages the end-to-end lifecycle of enterprise marketing deliverables (Blogs, Polls, Flowcharts, Carousels). It provides structured planning, mandatory content brief gates, automatic brief-to-item mapping, unbriefed dropdown filters, attachment requirement rules, multi-stage sequential reviews, mandatory feedback tracking, strict role permission controls, default publisher settings, and automated SLA email alerts.
 
 ```mermaid
 graph TD
@@ -18,7 +18,20 @@ graph TD
 
 ---
 
-## 2. DocType Data Model Summary
+## 2. Designated Approvers & Publisher Configuration
+
+The default operational roles are assigned to the following designated team email accounts:
+
+- **Technical Reviewer**: `Avishkar.Kabadi@optimumdataanalytics.com` (Avishkar Kabadi)
+- **Business Reviewer**: `vishwajeet.borade@optimumdataanalytics.com` (Vishwajeet Borade)
+- **Default Publisher**: `Mrudula.Saradar@optimumdataanalytics.com` (Mrudula Saradar)
+
+### Automatic Name Parsing (`firstname.lastname`)
+The email engine dynamically extracts human-readable names (`"Firstname Lastname"`) from user accounts or parses `firstname.lastname@domain.com` email strings as a fallback, ensuring every email greeting and status line renders full human names instead of raw system IDs or generic placeholders.
+
+---
+
+## 3. DocType Data Model Summary
 
 ### 1. `Content Calendar` (Master Setup)
 - **Purpose**: Defines active marketing operational periods (e.g. *"2026 Global Marketing Calendar"*, Jan 1 – Dec 31). Modeled after Frappe HR's Holiday List.
@@ -31,22 +44,25 @@ graph TD
   - `content_calendar`, `planned_publish_date`, `sla_due_date`, `risk_flag` (*On track, At risk, Late*).
   - `assigned_to` (Writer), `reviewer_technical` (SME), `reviewer_business` (Marketing Manager).
   - `status` / `workflow_state` (*Planned, Briefed, In Progress, In Review - Technical, In Review - Business, In Revision, Approved, Published*).
-  - **Attachment Slots**:
-    - `content_file_1` (Attach - **Primary Content File (Mandatory for Review)**).
-    - `content_file_2` (Attach - Supporting Asset 1 (Optional)).
-    - `content_file_3` (Attach - Supporting Asset 2 (Optional)).
+  - **Writer's Attachment Slots**:
+    - `content_file_1` (Attach - **Primary Content Draft (Mandatory for Review)**).
+    - `content_file_2` (Attach - Writer's Supporting Asset 1 (Optional)).
+    - `content_file_3` (Attach - Writer's Supporting Asset 2 (Optional)).
   - `revision_feedback_notes` (Mandatory notes required when requesting changes).
 
 ### 3. `Content Brief` (Creative Blueprint)
 - **Purpose**: Creative instructions and SEO guidelines created by the Marketing Lead for the writer.
-- **Mandatory Gate**: A linked `Content Brief` **must** exist before an item can be moved to state **`Briefed`**.
+- **Automatic Database Write-Back**: Saving a `Content Brief` automatically writes its ID back to `Content Item.content_brief` in MariaDB via Python controller.
+- **Unbriefed Item Filter**: Creating a brief from the Content Brief tab filters the dropdown to show **ONLY Content Items without a brief yet**.
+- **Auto-Redirect Flow**: Saving a brief automatically alerts the user and redirects back to the `Content Item` form so the Marketing Lead can click **`Issue Brief`**.
+- **1 Brief Rule**: Only 1 `Content Brief` can exist per `Content Item`.
 - **Key Fields**: `content_item` (Link), `outline` (Rich text editor), `target_audience`, `primary_keyword`, `word_target`, `accepted_by_writer` (Check), `accepted_on` (Datetime).
 
 ### 4. `Marketing Settings` (Central Configuration)
 - **Purpose**: Single DocType accessible under **Setup** in the workspace sidebar to configure global defaults, default publisher, and email templates.
 - **Key Fields**:
   - `enable_email_notifications` (Checkbox master switch).
-  - `default_publisher` (Link: User - Default Publisher / Marketing Lead).
+  - `default_publisher` (`Mrudula.Saradar@optimumdataanalytics.com`).
   - `writer_email_template` (Link: Email Template for assignments & revisions).
   - `reviewer_email_template` (Link: Email Template for technical & business reviews).
   - `publisher_email_template` (Link: Email Template for final approval & publishing).
@@ -54,7 +70,7 @@ graph TD
 
 ---
 
-## 3. Strict Role Permissions & Access Control Matrix
+## 4. Strict Role Permissions & Access Control Matrix
 
 Access permissions are enforced dynamically in `permissions.py` (record level), `content_item.py` (server validation), and `content_item.js` (client form control):
 
@@ -62,13 +78,13 @@ Access permissions are enforced dynamically in `permissions.py` (record level), 
 | :--- | :--- | :--- | :--- |
 | **Marketing Lead** | Full (`create: 1, delete: 1`) | Full edit access to all metadata, calendar, and publishing fields. | Full View, Download & Replace. |
 | **Default Publisher** | Full (`create: 1, delete: 1`) | Can view all deliverables and edit publishing details. | Full View & Download. |
-| **Content Writer** | **Blocked** (`create: 0, delete: 0`) | Core metadata fields are **read-only**. Can ONLY upload attachments (`content_file_1`, `content_file_2`, `content_file_3`), add notes, check `accepted_by_writer` on brief, and transition state to `In Review`. | View, Download & Upload. |
-| **Technical Reviewer** | **Blocked** (`create: 0, delete: 0`) | Core metadata & attachments are **read-only**. Can ONLY edit `revision_feedback_notes` when requesting changes and transition states (`Approve Technical`, `Request Changes`). | Full View & Download (Cannot Replace). |
-| **Business Reviewer** | **Blocked** (`create: 0, delete: 0`) | Core metadata & attachments are **read-only**. Can ONLY edit `revision_feedback_notes` when requesting changes and transition states (`Approve Business`, `Request Changes`). | Full View & Download (Cannot Replace). |
+| **Content Writer** | **Blocked** (`create: 0, delete: 0`) | Core metadata fields are **read-only**. Can ONLY upload/edit draft attachments (`content_file_1`, `content_file_2`, `content_file_3`), add notes, check `accepted_by_writer` on brief, and transition state to `In Review`. | View, Download & Upload Draft Files. |
+| **Technical Reviewer** | **Blocked** (`create: 0, delete: 0`) | Core metadata & draft attachments are **read-only**. Can ONLY edit `revision_feedback_notes` when requesting changes and transition states (`Approve Technical`, `Request Changes`). | Full View & Download (Cannot Replace Writer Files). |
+| **Business Reviewer** | **Blocked** (`create: 0, delete: 0`) | Core metadata & draft attachments are **read-only**. Can ONLY edit `revision_feedback_notes` when requesting changes and transition states (`Approve Business`, `Request Changes`). | Full View & Download (Cannot Replace Writer Files). |
 
 ---
 
-## 4. End-to-End Operational Workflow
+## 5. End-to-End Operational Workflow & Email Recipient Rules
 
 The following state machine governs every deliverable from planning to publishing:
 
@@ -77,7 +93,7 @@ stateDiagram-v2
     [*] --> Planned: Lead schedules Content Item
     Planned --> Briefed: Lead issues Content Brief (Mandatory Brief Check)
     Briefed --> InProgress: Writer reviews & checks 'Accepted By Writer'
-    InProgress --> InReviewTechnical: Writer uploads primary file & submits (Mandatory File Check)
+    InProgress --> InReviewTechnical: Writer uploads primary draft & submits (Mandatory File Check)
     InReviewTechnical --> InRevision: Technical Reviewer requests changes (mandatory notes)
     InReviewTechnical --> InReviewBusiness: Technical Reviewer approves technical
     InReviewBusiness --> InRevision: Business Reviewer requests changes (mandatory notes)
@@ -87,43 +103,31 @@ stateDiagram-v2
     Published --> [*]
 ```
 
-### Detailed Step-by-Step Flow:
+### Detailed Notification Dispatch Protocol:
 
-1. **Scheduling (`Planned`)**:
-   - The Marketing Lead creates a `Content Item` on the calendar grid, assigning a Writer, Technical Reviewer, and Business Reviewer.
+1. **Briefing (`Planned` → `Briefed`)**:
+   - Recipient: **Content Writer** (`assigned_to`).
+   - Email: Informs writer of assignment, planned publish date, and instructions to accept Content Brief.
 
-2. **Briefing (`Planned` → `Briefed`)**:
-   - The Lead creates a linked `Content Brief` (outline, keywords, target audience) and clicks **`Issue Brief`**.
-   - **Validation Gate**: If no `Content Brief` is linked, the system blocks the transition.
-   - **Email**: Triggers email notification to the assigned **Content Writer**.
+2. **Technical Review Submission (`In Progress` → `In Review - Technical`)**:
+   - Recipients: **Technical Reviewer** (`Avishkar.Kabadi@optimumdataanalytics.com`), CC **Business Reviewer**.
+   - Email: Contains writer name, SLA due date, and clickable HTML links for populated attachment drafts.
 
-3. **Acceptance (`Briefed` → `In Progress`)**:
-   - The assigned Writer opens the `Content Brief`, reviews the guidelines, and checks **`Accepted By Writer`**. This automatically advances the item to **`In Progress`**.
+3. **Technical Review Approval (`In Review - Technical` → `In Review - Business`)**:
+   - Recipients: **Business Reviewer** (`vishwajeet.borade@optimumdataanalytics.com`) AND **Content Writer** (`assigned_to`).
+   - Email: Notifies writer that Technical Review passed and informs Business Reviewer to review the item.
 
-4. **Technical Review Submission (`In Progress` → `In Review - Technical`)**:
-   - The Writer completes the draft, attaches `content_file_1` (Primary Content File - Mandatory), and clicks **`Submit for Technical Review`**.
-   - **Validation Gate**: If `content_file_1` is empty, the system blocks submission.
-   - **Email**: Triggers email notification to `reviewer_technical` with full human names and clean HTML hyperlinks for attached files.
+4. **Revision Requested (`In Review` → `In Revision`)**:
+   - Recipient: **Content Writer** (`assigned_to`).
+   - Email: Displays reviewer feedback notes and link to draft file.
 
-5. **Technical Review Signoff or Revision**:
-   - **If Revision Needed**: Technical Reviewer enters notes into `revision_feedback_notes` and clicks **`Request Changes`** → State becomes **`In Revision`** (Triggers email to Writer with feedback notes).
-   - **If Technical Approved**: Technical Reviewer clicks **`Approve Technical`** → State becomes **`In Review - Business`** (Triggers email to Business Reviewer). If Technical and Business reviewers are the same person, recipient lists deduplicate automatically.
+5. **Business Review Approval (`In Review - Business` → `Approved`)**:
+   - Recipients: **Default Publisher** (`Mrudula.Saradar@optimumdataanalytics.com`) AND **Content Writer** (`assigned_to`).
+   - Email: Notifies writer and publisher that deliverable is fully approved.
 
-6. **Business Review Signoff**:
-   - Business Reviewer reviews the deliverable and clicks **`Approve Business`** → State becomes **`Approved`**.
-   - **Email**: Triggers email notification to the **Default Publisher** and Writer.
-
-7. **Publishing (`Approved` → `Published`)**:
-   - The Publisher / Marketing Lead enters `published_url` and clicks **`Publish`**. State becomes **`Published`**.
-
----
-
-## 5. Automated SLA & Overdue Alert Engine
-
-- Every `Content Item` calculates an `sla_due_date` based on `content_type` (e.g. 30 days before publish date for Blogs, 14 days for Flowcharts/Carousels, 7 days for Polls).
-- A daily automated job evaluates items past `sla_due_date`:
-  - Sets `risk_flag = "Late"`.
-  - Dispatches an urgent email alert to involved users using `overdue_sla_email_template`.
+6. **Publishing (`Approved` → `Published`)**:
+   - Recipients: **Content Writer** (`assigned_to`) AND **Default Publisher** (`Mrudula.Saradar@optimumdataanalytics.com`).
+   - Email: Notifies writer and publisher with live published URL link.
 
 ---
 

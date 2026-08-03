@@ -127,23 +127,23 @@
   {
    "fieldname": "content_section",
    "fieldtype": "Section Break",
-   "label": "Deliverables & Attachments (Primary Mandatory, 2 Optional)"
+   "label": "Writer's Content Drafts & Attachments"
   },
   {
    "fieldname": "content_file_1",
    "fieldtype": "Attach",
    "in_list_view": 1,
-   "label": "Primary Content File (Mandatory for Review)"
+   "label": "Primary Content Draft (Mandatory for Review)"
   },
   {
    "fieldname": "content_file_2",
    "fieldtype": "Attach",
-   "label": "Supporting Asset 1 (Optional)"
+   "label": "Writer's Supporting Asset 1 (Optional)"
   },
   {
    "fieldname": "content_file_3",
    "fieldtype": "Attach",
-   "label": "Supporting Asset 2 (Optional)"
+   "label": "Writer's Supporting Asset 2 (Optional)"
   },
   {
    "fieldname": "content_brief",
@@ -208,7 +208,7 @@
  "icon": "list-checks",
  "idx": 0,
  "links": [],
- "modified": "2026-08-03 11:12:00",
+ "modified": "2026-08-03 11:48:00",
  "modified_by": "Administrator",
  "module": "ODA Marketing",
  "name": "Content Item",

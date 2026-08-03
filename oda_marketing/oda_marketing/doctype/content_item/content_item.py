@@ -46,8 +46,15 @@ class ContentItem(Document):
 				"reviewer_technical", "reviewer_business"
 			]
 			for field in metadata_fields:
-				if getattr(self, field, None) != getattr(before, field, None):
-					frappe.throw(_("Only <b>Marketing Leads</b> are permitted to modify core item metadata ({0}).").format(field), frappe.PermissionError)
+				val_self = getattr(self, field, None)
+				val_before = getattr(before, field, None)
+
+				if field == "planned_publish_date":
+					if val_self and val_before and getdate(val_self) != getdate(val_before):
+						frappe.throw(_("Only <b>Marketing Leads</b> are permitted to modify core item metadata ({0}).").format(field), frappe.PermissionError)
+				else:
+					if str(val_self or "") != str(val_before or ""):
+						frappe.throw(_("Only <b>Marketing Leads</b> are permitted to modify core item metadata ({0}).").format(field), frappe.PermissionError)
 
 	def sync_status_with_workflow(self):
 		wf_state = getattr(self, "workflow_state", None)
@@ -90,7 +97,7 @@ class ContentItem(Document):
 
 	def validate_primary_attachment_mandatory(self):
 		if getattr(self, "workflow_state", None) == "In Review - Technical" and not self.content_file_1:
-			frappe.throw(_("<b>Primary Content File (content_file_1)</b> is mandatory before submitting for review."))
+			frappe.throw(_("<b>Primary Content Draft (content_file_1)</b> is mandatory before submitting for review."))
 
 	def validate_revision_notes(self):
 		if getattr(self, "workflow_state", None) == "In Revision" and not (self.revision_feedback_notes and self.revision_feedback_notes.strip()):
@@ -102,11 +109,18 @@ class ContentItem(Document):
 		first_name, last_name = frappe.db.get_value("User", user_email, ["first_name", "last_name"]) or (None, None)
 		if first_name:
 			return f"{first_name} {last_name or ''}".strip()
+
+		# Fallback to parsing firstname.lastname from email string (e.g. Avishkar.Kabadi@optimumdataanalytics.com -> Avishkar Kabadi)
+		if "@" in user_email:
+			username_part = user_email.split("@")[0]
+			formatted = username_part.replace(".", " ").replace("_", " ").title()
+			return formatted
+
 		return user_email
 
-	def get_file_link_html(self, file_path, label="View Primary File"):
+	def get_file_link_html(self, file_path, label="View Primary Draft"):
 		if not file_path:
-			return "<span>No File Attached</span>"
+			return ""
 		full_url = get_url(file_path)
 		return f'<a href="{full_url}" target="_blank" style="color: #2563eb; text-decoration: underline; font-weight: 600;">{label}</a>'
 
@@ -120,7 +134,7 @@ class ContentItem(Document):
 			"reviewer_technical_name": self.get_user_full_name(self.reviewer_technical),
 			"reviewer_business_name": self.get_user_full_name(self.reviewer_business),
 			"publisher_name": self.get_user_full_name(publisher_email),
-			"content_file_1_link": self.get_file_link_html(self.content_file_1, "View Primary Deliverable"),
+			"content_file_1_link": self.get_file_link_html(self.content_file_1, "View Primary Content Draft"),
 			"content_file_2_link": self.get_file_link_html(self.content_file_2, "View Supporting Asset 1"),
 			"content_file_3_link": self.get_file_link_html(self.content_file_3, "View Supporting Asset 2"),
 		}
@@ -159,27 +173,33 @@ class ContentItem(Document):
 			template_name = settings.reviewer_email_template
 
 		elif current_state == "In Review - Business":
+			# Technical Review approved! Send email to Business Reviewer AND Writer
 			if self.reviewer_business:
 				recipients.add(self.reviewer_business)
+			if self.assigned_to:
+				recipients.add(self.assigned_to)
 			template_name = settings.reviewer_email_template
 
 		elif current_state == "In Revision":
+			# Revision requested! Send email to Writer
 			if self.assigned_to:
 				recipients.add(self.assigned_to)
 			template_name = settings.writer_email_template
 
 		elif current_state == "Approved":
+			# Business Review approved! Send email to Publisher AND Writer
 			if publisher_email:
 				recipients.add(publisher_email)
 			if self.assigned_to:
-				cc.add(self.assigned_to)
+				recipients.add(self.assigned_to)
 			template_name = settings.publisher_email_template
 
 		elif current_state == "Published":
+			# Deliverable Published! Send email to Writer AND Publisher
 			if self.assigned_to:
 				recipients.add(self.assigned_to)
 			if publisher_email:
-				cc.add(publisher_email)
+				recipients.add(publisher_email)
 			template_name = settings.publisher_email_template
 
 		if recipients and template_name and frappe.db.exists("Email Template", template_name):

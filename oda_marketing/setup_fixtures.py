@@ -27,8 +27,9 @@ def setup_test_users():
 	test_users = [
 		{"email": "lead.test@oda.local", "first_name": "Marketing", "last_name": "Lead Test", "role": "Marketing Lead"},
 		{"email": "writer.test@oda.local", "first_name": "Content", "last_name": "Writer Test", "role": "Content Writer"},
-		{"email": "techrev.test@oda.local", "first_name": "Technical", "last_name": "Reviewer Test", "role": "Technical Reviewer"},
-		{"email": "bizrev.test@oda.local", "first_name": "Business", "last_name": "Reviewer Test", "role": "Business Reviewer"},
+		{"email": "Avishkar.Kabadi@optimumdataanalytics.com", "first_name": "Avishkar", "last_name": "Kabadi", "role": "Technical Reviewer"},
+		{"email": "vishwajeet.borade@optimumdataanalytics.com", "first_name": "Vishwajeet", "last_name": "Borade", "role": "Business Reviewer"},
+		{"email": "Mrudula.Saradar@optimumdataanalytics.com", "first_name": "Mrudula", "last_name": "Saradar", "role": "Marketing Lead"},
 	]
 	for u in test_users:
 		if not frappe.db.exists("User", u["email"]):
@@ -54,23 +55,82 @@ def setup_email_templates_and_settings():
 	templates = [
 		{
 			"name": "Marketing Writer Notification",
-			"subject": "[ASSIGNMENT / REVISION] Task Update for '{{ doc.title }}'",
-			"response": "<p>Hello <b>{{ assigned_to_name }}</b>,</p><p>Your marketing deliverable <b>{{ doc.title }}</b> status is now: <b>{{ doc.workflow_state }}</b>.</p>{% if doc.revision_feedback_notes %}<p style='background-color: #fef2f2; padding: 10px; border-left: 4px solid #ef4444;'><b>Reviewer Feedback / Notes:</b><br>{{ doc.revision_feedback_notes }}</p>{% endif %}<p>Primary Deliverable: {{ content_file_1_link }}</p><p>Please log into the portal to proceed.</p>"
+			"subject": "[TASK NOTIFICATION] Deliverable '{{ doc.title }}' Status: {{ doc.workflow_state }}",
+			"response": """<p>Hello <b>{{ assigned_to_name }}</b>,</p>
+{% if doc.workflow_state == "Briefed" %}
+  <p>You have been assigned to create the content deliverable <b>{{ doc.title }}</b> (Type: {{ doc.content_type }}). A Content Brief has been issued for your review.</p>
+  <p><b>Planned Publish Date:</b> {{ doc.planned_publish_date }}</p>
+  <p>Please log into the portal, review the Content Brief, and check <b>'Accepted By Writer'</b> to begin drafting.</p>
+{% elif doc.workflow_state == "In Revision" %}
+  <p>Revisions have been requested for your deliverable <b>{{ doc.title }}</b>.</p>
+  {% if doc.revision_feedback_notes %}
+    <p style='background-color: #fef2f2; padding: 12px; border-left: 4px solid #ef4444; margin: 12px 0;'>
+      <b>Reviewer Feedback / Notes:</b><br>{{ doc.revision_feedback_notes }}
+    </p>
+  {% endif %}
+  {% if content_file_1_link %}
+    <p><b>Current Primary Draft:</b> {{ content_file_1_link }}</p>
+  {% endif %}
+  <p>Please update your draft attachments and click <b>'Resubmit Draft'</b>.</p>
+{% else %}
+  <p>Your marketing deliverable <b>{{ doc.title }}</b> status is now: <b>{{ doc.workflow_state }}</b>.</p>
+{% endif %}"""
 		},
 		{
 			"name": "Marketing Reviewer Notification",
-			"subject": "[REVIEW REQUIRED] {{ doc.workflow_state }} for '{{ doc.title }}'",
-			"response": "<p>Hello <b>Reviewer</b>,</p><p>The deliverable <b>{{ doc.title }}</b> (Type: {{ doc.content_type }}) requires your signoff for status: <b>{{ doc.workflow_state }}</b>.</p><ul><li><b>Assigned Writer:</b> {{ assigned_to_name }}</li><li><b>SLA Due Date:</b> {{ doc.sla_due_date }}</li><li><b>Primary Deliverable:</b> {{ content_file_1_link }}</li><li><b>Supporting Asset 1:</b> {{ content_file_2_link }}</li></ul><p>Please log into the portal to review and approve or request changes.</p>"
+			"subject": "[REVIEW NOTIFICATION] {{ doc.workflow_state }} for '{{ doc.title }}'",
+			"response": """<p>Hello <b>Team</b>,</p>
+<p>Content deliverable <b>{{ doc.title }}</b> (Type: {{ doc.content_type }}) status has updated to: <b>{{ doc.workflow_state }}</b>.</p>
+<ul>
+  <li><b>Writer:</b> {{ assigned_to_name }}</li>
+  <li><b>SLA Due Date:</b> {{ doc.sla_due_date }}</li>
+  {% if content_file_1_link %}
+    <li><b>Primary Content Draft:</b> {{ content_file_1_link }}</li>
+  {% endif %}
+  {% if content_file_2_link %}
+    <li><b>Supporting Asset 1:</b> {{ content_file_2_link }}</li>
+  {% endif %}
+  {% if content_file_3_link %}
+    <li><b>Supporting Asset 2:</b> {{ content_file_3_link }}</li>
+  {% endif %}
+</ul>
+<p>Please log into the portal to review the status.</p>"""
 		},
 		{
 			"name": "Marketing Publisher Notification",
-			"subject": "[READY TO PUBLISH] Deliverable '{{ doc.title }}' Fully Approved",
-			"response": "<p>Hello <b>{{ publisher_name }}</b>,</p><p>Great news! The deliverable <b>{{ doc.title }}</b> has passed both Technical and Business reviews and is marked <b>Approved</b> for final publishing.</p><ul><li><b>Writer:</b> {{ assigned_to_name }}</li><li><b>Primary Asset:</b> {{ content_file_1_link }}</li></ul><p>Please log into the portal to publish this asset.</p>"
+			"subject": "[PUBLISHING NOTIFICATION] Deliverable '{{ doc.title }}' Status: {{ doc.workflow_state }}",
+			"response": """<p>Hello <b>{{ publisher_name }}</b> / <b>{{ assigned_to_name }}</b>,</p>
+{% if doc.workflow_state == "Approved" %}
+  <p>Great news! The deliverable <b>{{ doc.title }}</b> has passed all technical and business reviews and is marked <b>Approved</b> for final publishing.</p>
+  <ul>
+    <li><b>Writer:</b> {{ assigned_to_name }}</li>
+    {% if content_file_1_link %}
+      <li><b>Primary Content Draft:</b> {{ content_file_1_link }}</li>
+    {% endif %}
+    {% if content_file_2_link %}
+      <li><b>Supporting Asset 1:</b> {{ content_file_2_link }}</li>
+    {% endif %}
+    {% if content_file_3_link %}
+      <li><b>Supporting Asset 2:</b> {{ content_file_3_link }}</li>
+    {% endif %}
+  </ul>
+  <p>Please log into the portal to publish this asset.</p>
+{% elif doc.workflow_state == "Published" %}
+  <p>Congratulations! The deliverable <b>{{ doc.title }}</b> has been published live.</p>
+  {% if doc.published_url %}
+    <p><b>Live Asset URL:</b> <a href="{{ doc.published_url }}" target="_blank">{{ doc.published_url }}</a></p>
+  {% endif %}
+{% endif %}"""
 		},
 		{
 			"name": "Marketing Overdue SLA Alert",
 			"subject": "[OVERDUE ALERT] Deliverable '{{ doc.title }}' Exceeded SLA Date",
-			"response": "<p style='color: #dc2626; font-weight: bold;'>URGENT ESCALATION ALERT</p><p>Content deliverable <b>{{ doc.title }}</b> (Planned Publish Date: {{ doc.planned_publish_date }}) has passed its SLA Due Date ({{ doc.sla_due_date }}).</p><p>Primary Asset Link: {{ content_file_1_link }}</p><p>Please expedite processing immediately.</p>"
+			"response": """<p style='color: #dc2626; font-weight: bold;'>URGENT ESCALATION ALERT</p>
+<p>Content deliverable <b>{{ doc.title }}</b> (Planned Publish Date: {{ doc.planned_publish_date }}) has passed its SLA Due Date ({{ doc.sla_due_date }}).</p>
+{% if content_file_1_link %}
+  <p><b>Primary Content Draft:</b> {{ content_file_1_link }}</p>
+{% endif %}
+<p>Please expedite processing immediately.</p>"""
 		}
 	]
 
@@ -91,17 +151,17 @@ def setup_email_templates_and_settings():
 			et.insert(ignore_permissions=True)
 			print(f"Created/Updated Email Template: {t['name']}")
 
-	# Pre-populate Marketing Settings Single DocType
+	# Pre-populate Marketing Settings Single DocType with designated users
 	settings = frappe.get_single("Marketing Settings")
 	settings.enable_email_notifications = 1
 	settings.enable_auto_overdue_flag = 1
-	settings.default_publisher = "lead.test@oda.local"
+	settings.default_publisher = "Mrudula.Saradar@optimumdataanalytics.com"
 	settings.writer_email_template = "Marketing Writer Notification"
 	settings.reviewer_email_template = "Marketing Reviewer Notification"
 	settings.publisher_email_template = "Marketing Publisher Notification"
 	settings.overdue_sla_email_template = "Marketing Overdue SLA Alert"
 	settings.save(ignore_permissions=True)
-	print("Pre-populated Marketing Settings with default publisher & templates.")
+	print("Pre-populated Marketing Settings with default publisher Mrudula.Saradar@optimumdataanalytics.com & templates.")
 
 
 def setup_workflow_states_and_actions():
@@ -225,7 +285,10 @@ def clear_and_seed_data():
 	cal.insert(ignore_permissions=True)
 	print(f"Created Master Setup Calendar: {cal_name}")
 
-	# Realistic marketing content items
+	# Realistic marketing content items assigned to real testing emails
+	tech_rev = "Avishkar.Kabadi@optimumdataanalytics.com"
+	biz_rev = "vishwajeet.borade@optimumdataanalytics.com"
+
 	sample_items = [
 		{
 			"title": "AI-Driven Clinical Decision Support Systems in HCLS",
@@ -234,8 +297,8 @@ def clear_and_seed_data():
 			"practice_area": "HCLS",
 			"planned_publish_date": "2026-08-15",
 			"assigned_to": "writer.test@oda.local",
-			"reviewer_technical": "techrev.test@oda.local",
-			"reviewer_business": "bizrev.test@oda.local",
+			"reviewer_technical": tech_rev,
+			"reviewer_business": biz_rev,
 			"content_file_1": "/files/genai_clinical_draft.pdf",
 			"target_state": "Published",
 			"published_url": "https://optimumdataanalytics.com/insights/ai-clinical-decision-support"
@@ -247,8 +310,8 @@ def clear_and_seed_data():
 			"practice_area": "Pharma Supply Chain",
 			"planned_publish_date": "2026-08-22",
 			"assigned_to": "writer.test@oda.local",
-			"reviewer_technical": "techrev.test@oda.local",
-			"reviewer_business": "bizrev.test@oda.local",
+			"reviewer_technical": tech_rev,
+			"reviewer_business": biz_rev,
 			"content_file_1": "/files/pharma_cold_chain.pdf",
 			"target_state": "In Review - Technical"
 		},
@@ -259,8 +322,8 @@ def clear_and_seed_data():
 			"practice_area": "Fintech",
 			"planned_publish_date": "2026-08-28",
 			"assigned_to": "writer.test@oda.local",
-			"reviewer_technical": "techrev.test@oda.local",
-			"reviewer_business": "bizrev.test@oda.local",
+			"reviewer_technical": tech_rev,
+			"reviewer_business": biz_rev,
 			"content_file_1": "/files/loan_flowchart.png",
 			"target_state": "In Progress"
 		},
@@ -271,8 +334,8 @@ def clear_and_seed_data():
 			"practice_area": "Agriculture",
 			"planned_publish_date": "2026-09-05",
 			"assigned_to": "writer.test@oda.local",
-			"reviewer_technical": "techrev.test@oda.local",
-			"reviewer_business": "bizrev.test@oda.local",
+			"reviewer_technical": tech_rev,
+			"reviewer_business": biz_rev,
 			"target_state": "Briefed"
 		},
 		{
@@ -282,8 +345,8 @@ def clear_and_seed_data():
 			"practice_area": "Pharma Supply Chain",
 			"planned_publish_date": "2026-09-10",
 			"assigned_to": "writer.test@oda.local",
-			"reviewer_technical": "techrev.test@oda.local",
-			"reviewer_business": "bizrev.test@oda.local",
+			"reviewer_technical": tech_rev,
+			"reviewer_business": biz_rev,
 			"target_state": "Planned"
 		},
 		{
@@ -293,8 +356,8 @@ def clear_and_seed_data():
 			"practice_area": "Cross-domain",
 			"planned_publish_date": "2026-09-18",
 			"assigned_to": "writer.test@oda.local",
-			"reviewer_technical": "techrev.test@oda.local",
-			"reviewer_business": "bizrev.test@oda.local",
+			"reviewer_technical": tech_rev,
+			"reviewer_business": biz_rev,
 			"target_state": "Planned"
 		}
 	]

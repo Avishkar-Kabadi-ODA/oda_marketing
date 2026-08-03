@@ -9,13 +9,12 @@ frappe.ui.form.on("Content Item", {
 			frm.add_custom_button(__("View Content Brief"), function() {
 				frappe.set_route("Form", "Content Brief", frm.doc.content_brief);
 			}, __("Actions"));
-		} else if (frappe.user.has_role("Marketing Lead") || frappe.user.has_role("System Manager")) {
+		} else if (!frm.doc.__islocal && (frappe.user.has_role("Marketing Lead") || frappe.user.has_role("System Manager"))) {
 			frm.add_custom_button(__("Create Content Brief"), function() {
-				frappe.model.with_doctype("Content Brief", function() {
-					const brief = frappe.model.get_new_doc("Content Brief");
-					brief.content_item = frm.doc.name;
-					frappe.set_route("Form", "Content Brief", brief.name);
-				});
+				frappe.route_options = {
+					"content_item": frm.doc.name
+				};
+				frappe.new_doc("Content Brief");
 			}, __("Actions"));
 		}
 
@@ -43,17 +42,18 @@ frappe.ui.form.on("Content Item", {
 		}
 
 		if (is_writer && !is_lead) {
-			// Writers can upload files & add notes, but cannot edit reviewer notes
+			// Assigned Writer can upload/edit all 3 draft attachments & working notes
 			frm.set_df_property("content_file_1", "read_only", 0);
 			frm.set_df_property("content_file_2", "read_only", 0);
 			frm.set_df_property("content_file_3", "read_only", 0);
 			frm.set_df_property("notes", "read_only", 0);
 			frm.set_df_property("revision_feedback_notes", "read_only", 1);
 		} else if (is_reviewer && !is_lead) {
-			// Reviewers can view files & edit feedback notes, but cannot replace files
+			// Reviewers can view & download writer files, but CANNOT modify/replace them
 			frm.set_df_property("content_file_1", "read_only", 1);
 			frm.set_df_property("content_file_2", "read_only", 1);
 			frm.set_df_property("content_file_3", "read_only", 1);
+			frm.set_df_property("notes", "read_only", 1);
 			frm.set_df_property("revision_feedback_notes", "read_only", 0);
 		}
 	}

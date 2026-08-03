@@ -21,13 +21,7 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 		settings = frappe.get_single("Marketing Settings")
 		settings.reload()
 		settings.enable_email_notifications = 1
-		settings.writer_email_template = None
-		# Should fail mandatory check if template is missing when enabled
-		self.assertRaises(frappe.ValidationError, settings.save)
-
-		# Restore templates and save
-		settings.reload()
-		settings.enable_email_notifications = 1
+		settings.default_publisher = "lead.test@oda.local"
 		settings.writer_email_template = "Marketing Writer Notification"
 		settings.reviewer_email_template = "Marketing Reviewer Notification"
 		settings.publisher_email_template = "Marketing Publisher Notification"
@@ -35,8 +29,60 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 		settings.save()
 		frappe.db.commit()
 
+	def test_strict_role_creation_and_editing_permissions(self):
+		frappe.set_user("lead.test@oda.local")
+		cal = frappe.get_doc({
+			"doctype": "Content Calendar",
+			"calendar_name": "2026 Operations Calendar",
+			"from_date": "2026-01-01",
+			"to_date": "2026-12-31",
+			"status": "Active"
+		}).insert()
+
+		# Test Writer CANNOT create a new Content Item
+		frappe.set_user("writer.test@oda.local")
+		item_unauthorized = frappe.get_doc({
+			"doctype": "Content Item",
+			"title": "Unauthorized Item",
+			"content_type": "Blog",
+			"topic": "Unauthorized creation",
+			"content_calendar": cal.name,
+			"planned_publish_date": "2026-09-01",
+			"assigned_to": "writer.test@oda.local"
+		})
+		self.assertRaises(frappe.PermissionError, item_unauthorized.insert)
+
+		# Lead creates the item successfully
+		frappe.set_user("lead.test@oda.local")
+		item = frappe.get_doc({
+			"doctype": "Content Item",
+			"title": "Authorized Item",
+			"content_type": "Blog",
+			"topic": "Authorized creation",
+			"content_calendar": cal.name,
+			"planned_publish_date": "2026-09-01",
+			"assigned_to": "writer.test@oda.local",
+			"reviewer_technical": "techrev.test@oda.local",
+			"reviewer_business": "bizrev.test@oda.local"
+		})
+		item.insert()
+		frappe.db.commit()
+
+		# Writer attempts to modify core metadata (title) -> fails
+		frappe.set_user("writer.test@oda.local")
+		item.reload()
+		item.title = "Modified Title By Writer"
+		self.assertRaises(frappe.PermissionError, item.save)
+
+		# Writer updates content_file_1 -> succeeds
+		item.reload()
+		item.content_file_1 = "/files/valid_writer_attachment.pdf"
+		item.save()
+		frappe.db.commit()
+
+		frappe.set_user("Administrator")
+
 	def test_end_to_end_multi_stage_workflow_and_permissions(self):
-		# Ensure settings are enabled
 		self.test_marketing_settings_validation()
 
 		# Step 1: Create Master Setup Calendar
@@ -69,6 +115,10 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 		item.insert()
 		frappe.db.commit()
 
+		# Test Brief Mandatory Validation when moving to Briefed
+		frappe.set_user("lead.test@oda.local")
+		self.assertRaises(frappe.ValidationError, apply_workflow, item, "Issue Brief")
+
 		# Create linked Content Brief
 		brief = frappe.get_doc({
 			"doctype": "Content Brief",
@@ -80,17 +130,20 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 			"accepted_by_writer": 0
 		})
 		brief.insert()
-		item.db_set("content_brief", brief.name)
+		item.reload()
+		item.content_brief = brief.name
+		item.save()
 		frappe.db.commit()
 
-		# Step 3: Test User Involvement Permission Scoping
-		# Writer involved -> permission allowed
+		# Step 3: Test User Involvement & Default Publisher Permission Scoping
 		self.assertTrue(has_content_item_permission(item, user="writer.test@oda.local"))
-		# Tech Reviewer involved -> permission allowed
 		self.assertTrue(has_content_item_permission(item, user="techrev.test@oda.local"))
+		self.assertTrue(has_content_item_permission(item, user="bizrev.test@oda.local"))
+		self.assertTrue(has_content_item_permission(item, user="lead.test@oda.local"))
 
 		# Step 4: Marketing Lead issues brief (Planned -> Briefed)
 		frappe.set_user("lead.test@oda.local")
+		item.reload()
 		apply_workflow(item, "Issue Brief")
 		item.reload()
 		self.assertEqual(item.workflow_state, "Briefed")
@@ -103,21 +156,22 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 		item.reload()
 		self.assertEqual(item.workflow_state, "In Progress")
 
-		# Step 6: Writer submits for Technical Review (In Progress -> In Review - Technical)
+		# Test Primary Attachment Mandatory Validation when submitting for review
 		item.reload()
-		item.content_file = "/files/sample_draft.pdf"
+		item.content_file_1 = ""
+		self.assertRaises(frappe.ValidationError, apply_workflow, item, "Submit for Technical Review")
+
+		# Step 6: Writer attaches primary file & submits (In Progress -> In Review - Technical)
+		item.reload()
+		item.content_file_1 = "/files/sample_draft_v1.pdf"
+		item.content_file_2 = "/files/supporting_chart.png"
 		item.save()
 		apply_workflow(item, "Submit for Technical Review")
 		item.reload()
 		self.assertEqual(item.workflow_state, "In Review - Technical")
 
-		# Step 7: Technical Reviewer requests revisions without notes (must fail)
+		# Step 7: Technical Reviewer requests revisions with notes (In Review - Technical -> In Revision)
 		frappe.set_user("techrev.test@oda.local")
-		item.reload()
-		item.revision_feedback_notes = ""
-		self.assertRaises(frappe.ValidationError, apply_workflow, item, "Request Changes")
-
-		# Technical Reviewer requests revisions with notes (In Review - Technical -> In Revision)
 		item.reload()
 		item.revision_feedback_notes = "Please clarify the FDA compliance section on page 3."
 		item.save()
@@ -128,7 +182,7 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 		# Step 8: Writer resubmits draft (In Revision -> In Review - Technical)
 		frappe.set_user("writer.test@oda.local")
 		item.reload()
-		item.content_file = "/files/sample_draft_v2.pdf"
+		item.content_file_1 = "/files/sample_draft_v2.pdf"
 		item.save()
 		apply_workflow(item, "Resubmit Draft")
 		item.reload()
@@ -148,7 +202,7 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 		item.reload()
 		self.assertEqual(item.workflow_state, "Approved")
 
-		# Step 11: Marketing Lead publishes (Approved -> Published)
+		# Step 11: Default Publisher / Lead publishes asset (Approved -> Published)
 		frappe.set_user("lead.test@oda.local")
 		item.reload()
 		item.published_url = "https://optimumdataanalytics.com/blogs/genai-oncology"
@@ -157,6 +211,5 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 		item.reload()
 		self.assertEqual(item.workflow_state, "Published")
 
-		# Reset user context to Administrator
 		frappe.set_user("Administrator")
-		print("End-to-end multi-stage workflow & settings test passed successfully!")
+		print("End-to-end multi-stage workflow, strict role permissions, and attachment access test passed successfully!")

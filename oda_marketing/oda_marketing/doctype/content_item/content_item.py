@@ -4,21 +4,50 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import add_days, getdate, nowdate
+from frappe.utils import add_days, getdate, nowdate, get_url
 
 
 class ContentItem(Document):
 	def validate(self):
+		self.validate_creation_permissions()
+		self.validate_metadata_edit_permissions()
 		self.sync_status_with_workflow()
 		self.validate_publish_date_with_calendar()
 		self.calculate_sla_due_date()
 		self.check_overdue_sla()
+		self.validate_content_brief_mandatory()
+		self.validate_primary_attachment_mandatory()
 		self.validate_revision_notes()
 
 	def before_insert(self):
 		if self.assigned_to:
 			self.owner = self.assigned_to
 		self.sync_status_with_workflow()
+
+	def is_lead_user(self):
+		user = frappe.session.user
+		if user == "Administrator":
+			return True
+		roles = frappe.get_roles(user)
+		return "Marketing Lead" in roles or "System Manager" in roles
+
+	def validate_creation_permissions(self):
+		if self.is_new() and not self.is_lead_user():
+			frappe.throw(_("Only <b>Marketing Leads</b> can create new Content Items."), frappe.PermissionError)
+
+	def validate_metadata_edit_permissions(self):
+		if not self.is_new() and not self.is_lead_user():
+			before = self.get_doc_before_save()
+			if not before:
+				return
+			metadata_fields = [
+				"title", "content_type", "topic", "practice_area",
+				"content_calendar", "planned_publish_date", "assigned_to",
+				"reviewer_technical", "reviewer_business"
+			]
+			for field in metadata_fields:
+				if getattr(self, field, None) != getattr(before, field, None):
+					frappe.throw(_("Only <b>Marketing Leads</b> are permitted to modify core item metadata ({0}).").format(field), frappe.PermissionError)
 
 	def sync_status_with_workflow(self):
 		wf_state = getattr(self, "workflow_state", None)
@@ -55,9 +84,47 @@ class ContentItem(Document):
 			if getdate(nowdate()) > getdate(self.sla_due_date):
 				self.risk_flag = "Late"
 
+	def validate_content_brief_mandatory(self):
+		if getattr(self, "workflow_state", None) == "Briefed" and not self.content_brief:
+			frappe.throw(_("<b>Content Brief is mandatory</b> before issuing a brief or setting status to 'Briefed'. Please create and link a Content Brief first."))
+
+	def validate_primary_attachment_mandatory(self):
+		if getattr(self, "workflow_state", None) == "In Review - Technical" and not self.content_file_1:
+			frappe.throw(_("<b>Primary Content File (content_file_1)</b> is mandatory before submitting for review."))
+
 	def validate_revision_notes(self):
 		if getattr(self, "workflow_state", None) == "In Revision" and not (self.revision_feedback_notes and self.revision_feedback_notes.strip()):
 			frappe.throw(_("Revision Feedback / Notes are mandatory when requesting changes or sending an item to 'In Revision'."))
+
+	def get_user_full_name(self, user_email):
+		if not user_email:
+			return "Team Member"
+		first_name, last_name = frappe.db.get_value("User", user_email, ["first_name", "last_name"]) or (None, None)
+		if first_name:
+			return f"{first_name} {last_name or ''}".strip()
+		return user_email
+
+	def get_file_link_html(self, file_path, label="View Primary File"):
+		if not file_path:
+			return "<span>No File Attached</span>"
+		full_url = get_url(file_path)
+		return f'<a href="{full_url}" target="_blank" style="color: #2563eb; text-decoration: underline; font-weight: 600;">{label}</a>'
+
+	def get_template_context(self):
+		settings = frappe.get_single("Marketing Settings")
+		publisher_email = settings.default_publisher if hasattr(settings, "default_publisher") else None
+
+		context = {
+			"doc": self,
+			"assigned_to_name": self.get_user_full_name(self.assigned_to),
+			"reviewer_technical_name": self.get_user_full_name(self.reviewer_technical),
+			"reviewer_business_name": self.get_user_full_name(self.reviewer_business),
+			"publisher_name": self.get_user_full_name(publisher_email),
+			"content_file_1_link": self.get_file_link_html(self.content_file_1, "View Primary Deliverable"),
+			"content_file_2_link": self.get_file_link_html(self.content_file_2, "View Supporting Asset 1"),
+			"content_file_3_link": self.get_file_link_html(self.content_file_3, "View Supporting Asset 2"),
+		}
+		return context
 
 	def on_update(self):
 		self.trigger_workflow_notifications()
@@ -73,49 +140,59 @@ class ContentItem(Document):
 		if previous_state == current_state or not current_state:
 			return
 
-		recipients = []
-		cc = []
+		recipients = set()
+		cc = set()
 		template_name = None
 
-		if current_state == "In Review - Technical":
+		publisher_email = getattr(settings, "default_publisher", None)
+
+		if current_state == "Briefed":
+			if self.assigned_to:
+				recipients.add(self.assigned_to)
+			template_name = settings.writer_email_template
+
+		elif current_state == "In Review - Technical":
 			if self.reviewer_technical:
-				recipients.append(self.reviewer_technical)
-			if self.reviewer_business:
-				cc.append(self.reviewer_business)
+				recipients.add(self.reviewer_technical)
+			if self.reviewer_business and self.reviewer_business != self.reviewer_technical:
+				cc.add(self.reviewer_business)
 			template_name = settings.reviewer_email_template
 
 		elif current_state == "In Review - Business":
 			if self.reviewer_business:
-				recipients.append(self.reviewer_business)
+				recipients.add(self.reviewer_business)
 			template_name = settings.reviewer_email_template
 
 		elif current_state == "In Revision":
 			if self.assigned_to:
-				recipients.append(self.assigned_to)
+				recipients.add(self.assigned_to)
 			template_name = settings.writer_email_template
 
 		elif current_state == "Approved":
+			if publisher_email:
+				recipients.add(publisher_email)
 			if self.assigned_to:
-				recipients.append(self.assigned_to)
-			lead = frappe.db.get_value("Has Role", {"role": "Marketing Lead"}, "parent")
-			if lead:
-				cc.append(lead)
+				cc.add(self.assigned_to)
 			template_name = settings.publisher_email_template
 
 		elif current_state == "Published":
 			if self.assigned_to:
-				recipients.append(self.assigned_to)
+				recipients.add(self.assigned_to)
+			if publisher_email:
+				cc.add(publisher_email)
 			template_name = settings.publisher_email_template
 
 		if recipients and template_name and frappe.db.exists("Email Template", template_name):
 			try:
 				tmpl = frappe.get_doc("Email Template", template_name)
-				subject = frappe.render_template(tmpl.subject, {"doc": self})
-				message = frappe.render_template(tmpl.response, {"doc": self})
+				ctx = self.get_template_context()
+
+				subject = frappe.render_template(tmpl.subject, ctx)
+				message = frappe.render_template(tmpl.response, ctx)
 
 				frappe.sendmail(
-					recipients=recipients,
-					cc=cc,
+					recipients=list(recipients),
+					cc=list(cc),
 					subject=subject,
 					message=message,
 					now=True
@@ -142,7 +219,7 @@ def send_overdue_sla_notifications():
 			"risk_flag": "Late",
 			"workflow_state": ["not in", ["Approved", "Published"]]
 		},
-		fields=["name", "title", "assigned_to", "reviewer_technical", "reviewer_business", "sla_due_date", "planned_publish_date"]
+		fields=["name"]
 	)
 
 	for item_data in overdue_items:
@@ -157,8 +234,9 @@ def send_overdue_sla_notifications():
 
 		if recipients:
 			try:
-				subject = frappe.render_template(tmpl.subject, {"doc": item})
-				message = frappe.render_template(tmpl.response, {"doc": item})
+				ctx = item.get_template_context()
+				subject = frappe.render_template(tmpl.subject, ctx)
+				message = frappe.render_template(tmpl.response, ctx)
 
 				frappe.sendmail(
 					recipients=list(recipients),

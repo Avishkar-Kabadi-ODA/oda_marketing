@@ -55,27 +55,32 @@ def setup_email_templates_and_settings():
 		{
 			"name": "Marketing Writer Notification",
 			"subject": "[ASSIGNMENT / REVISION] Task Update for '{{ doc.title }}'",
-			"response": "<p>Hello {{ doc.assigned_to }},</p><p>Your marketing task <b>{{ doc.title }}</b> status has updated to: <b>{{ doc.workflow_state }}</b>.</p><p>{% if doc.revision_feedback_notes %}<b>Feedback Notes:</b> {{ doc.revision_feedback_notes }}<br>{% endif %}Please log into the portal to complete the deliverable.</p>"
+			"response": "<p>Hello <b>{{ assigned_to_name }}</b>,</p><p>Your marketing deliverable <b>{{ doc.title }}</b> status is now: <b>{{ doc.workflow_state }}</b>.</p>{% if doc.revision_feedback_notes %}<p style='background-color: #fef2f2; padding: 10px; border-left: 4px solid #ef4444;'><b>Reviewer Feedback / Notes:</b><br>{{ doc.revision_feedback_notes }}</p>{% endif %}<p>Primary Deliverable: {{ content_file_1_link }}</p><p>Please log into the portal to proceed.</p>"
 		},
 		{
 			"name": "Marketing Reviewer Notification",
 			"subject": "[REVIEW REQUIRED] {{ doc.workflow_state }} for '{{ doc.title }}'",
-			"response": "<p>Hello Reviewer,</p><p>The deliverable <b>{{ doc.title }}</b> ({{ doc.content_type }}) requires your signoff for status: <b>{{ doc.workflow_state }}</b>.</p><p>Content File: {{ doc.content_file or 'Attached in document' }}<br>SLA Due Date: {{ doc.sla_due_date }}</p><p>Please log into the portal to review and approve or request revisions.</p>"
+			"response": "<p>Hello <b>Reviewer</b>,</p><p>The deliverable <b>{{ doc.title }}</b> (Type: {{ doc.content_type }}) requires your signoff for status: <b>{{ doc.workflow_state }}</b>.</p><ul><li><b>Assigned Writer:</b> {{ assigned_to_name }}</li><li><b>SLA Due Date:</b> {{ doc.sla_due_date }}</li><li><b>Primary Deliverable:</b> {{ content_file_1_link }}</li><li><b>Supporting Asset 1:</b> {{ content_file_2_link }}</li></ul><p>Please log into the portal to review and approve or request changes.</p>"
 		},
 		{
 			"name": "Marketing Publisher Notification",
-			"subject": "[READY TO PUBLISH] Deliverable '{{ doc.title }}' Approved",
-			"response": "<p>Hello Marketing Lead,</p><p>Great news! The deliverable <b>{{ doc.title }}</b> has passed both Technical and Business reviews and is marked <b>Approved</b> for final publishing.</p>"
+			"subject": "[READY TO PUBLISH] Deliverable '{{ doc.title }}' Fully Approved",
+			"response": "<p>Hello <b>{{ publisher_name }}</b>,</p><p>Great news! The deliverable <b>{{ doc.title }}</b> has passed both Technical and Business reviews and is marked <b>Approved</b> for final publishing.</p><ul><li><b>Writer:</b> {{ assigned_to_name }}</li><li><b>Primary Asset:</b> {{ content_file_1_link }}</li></ul><p>Please log into the portal to publish this asset.</p>"
 		},
 		{
 			"name": "Marketing Overdue SLA Alert",
 			"subject": "[OVERDUE ALERT] Deliverable '{{ doc.title }}' Exceeded SLA Date",
-			"response": "<p><b>URGENT:</b> Content deliverable <b>{{ doc.title }}</b> (Planned Publish Date: {{ doc.planned_publish_date }}) has passed its SLA Due Date ({{ doc.sla_due_date }}).</p><p>Please expedite processing immediately.</p>"
+			"response": "<p style='color: #dc2626; font-weight: bold;'>URGENT ESCALATION ALERT</p><p>Content deliverable <b>{{ doc.title }}</b> (Planned Publish Date: {{ doc.planned_publish_date }}) has passed its SLA Due Date ({{ doc.sla_due_date }}).</p><p>Primary Asset Link: {{ content_file_1_link }}</p><p>Please expedite processing immediately.</p>"
 		}
 	]
 
 	for t in templates:
-		if not frappe.db.exists("Email Template", t["name"]):
+		if frappe.db.exists("Email Template", t["name"]):
+			et = frappe.get_doc("Email Template", t["name"])
+			et.subject = t["subject"]
+			et.response = t["response"]
+			et.save(ignore_permissions=True)
+		else:
 			et = frappe.get_doc({
 				"doctype": "Email Template",
 				"name": t["name"],
@@ -84,18 +89,19 @@ def setup_email_templates_and_settings():
 				"use_html": 1
 			})
 			et.insert(ignore_permissions=True)
-			print(f"Created Email Template: {t['name']}")
+			print(f"Created/Updated Email Template: {t['name']}")
 
 	# Pre-populate Marketing Settings Single DocType
 	settings = frappe.get_single("Marketing Settings")
 	settings.enable_email_notifications = 1
 	settings.enable_auto_overdue_flag = 1
+	settings.default_publisher = "lead.test@oda.local"
 	settings.writer_email_template = "Marketing Writer Notification"
 	settings.reviewer_email_template = "Marketing Reviewer Notification"
 	settings.publisher_email_template = "Marketing Publisher Notification"
 	settings.overdue_sla_email_template = "Marketing Overdue SLA Alert"
 	settings.save(ignore_permissions=True)
-	print("Pre-populated Marketing Settings with default templates.")
+	print("Pre-populated Marketing Settings with default publisher & templates.")
 
 
 def setup_workflow_states_and_actions():
@@ -230,6 +236,7 @@ def clear_and_seed_data():
 			"assigned_to": "writer.test@oda.local",
 			"reviewer_technical": "techrev.test@oda.local",
 			"reviewer_business": "bizrev.test@oda.local",
+			"content_file_1": "/files/genai_clinical_draft.pdf",
 			"target_state": "Published",
 			"published_url": "https://optimumdataanalytics.com/insights/ai-clinical-decision-support"
 		},
@@ -242,6 +249,7 @@ def clear_and_seed_data():
 			"assigned_to": "writer.test@oda.local",
 			"reviewer_technical": "techrev.test@oda.local",
 			"reviewer_business": "bizrev.test@oda.local",
+			"content_file_1": "/files/pharma_cold_chain.pdf",
 			"target_state": "In Review - Technical"
 		},
 		{
@@ -253,6 +261,7 @@ def clear_and_seed_data():
 			"assigned_to": "writer.test@oda.local",
 			"reviewer_technical": "techrev.test@oda.local",
 			"reviewer_business": "bizrev.test@oda.local",
+			"content_file_1": "/files/loan_flowchart.png",
 			"target_state": "In Progress"
 		},
 		{
@@ -302,6 +311,7 @@ def clear_and_seed_data():
 			"assigned_to": data["assigned_to"],
 			"reviewer_technical": data["reviewer_technical"],
 			"reviewer_business": data["reviewer_business"],
+			"content_file_1": data.get("content_file_1", ""),
 			"published_url": data.get("published_url", ""),
 			"owner": data["assigned_to"]
 		})

@@ -18,7 +18,9 @@
   "reviewer_technical",
   "reviewer_business",
   "content_section",
-  "content_file",
+  "content_file_1",
+  "content_file_2",
+  "content_file_3",
   "content_brief",
   "column_break_2",
   "sla_due_date",
@@ -125,13 +127,23 @@
   {
    "fieldname": "content_section",
    "fieldtype": "Section Break",
-   "label": "Deliverable & Brief Reference"
+   "label": "Deliverables & Attachments (Primary Mandatory, 2 Optional)"
   },
   {
-   "fieldname": "content_file",
+   "fieldname": "content_file_1",
    "fieldtype": "Attach",
    "in_list_view": 1,
-   "label": "Content File (PDF / DOCX / Image / TXT)"
+   "label": "Primary Content File (Mandatory for Review)"
+  },
+  {
+   "fieldname": "content_file_2",
+   "fieldtype": "Attach",
+   "label": "Supporting Asset 1 (Optional)"
+  },
+  {
+   "fieldname": "content_file_3",
+   "fieldtype": "Attach",
+   "label": "Supporting Asset 2 (Optional)"
   },
   {
    "fieldname": "content_brief",
@@ -196,7 +208,7 @@
  "icon": "list-checks",
  "idx": 0,
  "links": [],
- "modified": "2026-08-03 07:45:00",
+ "modified": "2026-08-03 11:12:00",
  "modified_by": "Administrator",
  "module": "ODA Marketing",
  "name": "Content Item",
@@ -228,7 +240,7 @@
    "write": 1
   },
   {
-   "create": 1,
+   "create": 0,
    "delete": 0,
    "email": 1,
    "export": 1,

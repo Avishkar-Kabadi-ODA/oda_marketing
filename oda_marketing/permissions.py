@@ -8,11 +8,20 @@ def has_app_permission(user=None):
 	return True
 
 
+def get_default_publisher():
+	try:
+		return frappe.db.get_single_value("Marketing Settings", "default_publisher")
+	except Exception:
+		return None
+
+
 def get_content_item_permission_query_conditions(user):
 	if not user:
 		user = frappe.session.user
 
-	if user == "Administrator" or "System Manager" in frappe.get_roles(user) or "Marketing Lead" in frappe.get_roles(user):
+	publisher = get_default_publisher()
+
+	if user == "Administrator" or "System Manager" in frappe.get_roles(user) or "Marketing Lead" in frappe.get_roles(user) or user == publisher:
 		return ""
 
 	user_esc = frappe.db.escape(user)
@@ -23,7 +32,9 @@ def has_content_item_permission(doc, ptype="read", user=None):
 	if not user:
 		user = frappe.session.user
 
-	if user == "Administrator" or "System Manager" in frappe.get_roles(user) or "Marketing Lead" in frappe.get_roles(user):
+	publisher = get_default_publisher()
+
+	if user == "Administrator" or "System Manager" in frappe.get_roles(user) or "Marketing Lead" in frappe.get_roles(user) or user == publisher:
 		return True
 
 	if doc.assigned_to == user or doc.reviewer_technical == user or doc.reviewer_business == user or doc.owner == user:
@@ -36,7 +47,9 @@ def get_content_brief_permission_query_conditions(user):
 	if not user:
 		user = frappe.session.user
 
-	if user == "Administrator" or "System Manager" in frappe.get_roles(user) or "Marketing Lead" in frappe.get_roles(user):
+	publisher = get_default_publisher()
+
+	if user == "Administrator" or "System Manager" in frappe.get_roles(user) or "Marketing Lead" in frappe.get_roles(user) or user == publisher:
 		return ""
 
 	user_esc = frappe.db.escape(user)
@@ -47,7 +60,9 @@ def has_content_brief_permission(doc, ptype="read", user=None):
 	if not user:
 		user = frappe.session.user
 
-	if user == "Administrator" or "System Manager" in frappe.get_roles(user) or "Marketing Lead" in frappe.get_roles(user):
+	publisher = get_default_publisher()
+
+	if user == "Administrator" or "System Manager" in frappe.get_roles(user) or "Marketing Lead" in frappe.get_roles(user) or user == publisher:
 		return True
 
 	if doc.owner == user:

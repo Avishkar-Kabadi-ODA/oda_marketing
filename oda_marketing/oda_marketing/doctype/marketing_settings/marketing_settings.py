@@ -9,12 +9,13 @@ from frappe.model.document import Document
 class MarketingSettings(Document):
 	def validate(self):
 		if self.enable_email_notifications:
-			mandatory_templates = [
+			mandatory_fields = [
+				("default_publisher", "Default Publisher / Marketing Lead"),
 				("writer_email_template", "Writer Email Template"),
 				("reviewer_email_template", "Reviewer Email Template"),
 				("publisher_email_template", "Publisher Email Template"),
 				("overdue_sla_email_template", "Overdue SLA Escalation Template")
 			]
-			for field, label in mandatory_templates:
+			for field, label in mandatory_fields:
 				if not getattr(self, field, None):
 					frappe.throw(_("<b>{0}</b> is mandatory when Email Notifications are enabled.").format(label))

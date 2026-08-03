@@ -8,6 +8,7 @@
   "enable_email_notifications",
   "enable_auto_overdue_flag",
   "column_break_1",
+  "default_publisher",
   "default_content_calendar",
   "templates_section",
   "writer_email_template",
@@ -37,6 +38,13 @@
   {
    "fieldname": "column_break_1",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "default_publisher",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Default Publisher / Marketing Lead",
+   "options": "User"
   },
   {
    "fieldname": "default_content_calendar",
@@ -86,7 +94,7 @@
  "idx": 0,
  "issingle": 1,
  "links": [],
- "modified": "2026-08-03 08:00:00",
+ "modified": "2026-08-03 11:05:00",
  "modified_by": "Administrator",
  "module": "ODA Marketing",
  "name": "Marketing Settings",

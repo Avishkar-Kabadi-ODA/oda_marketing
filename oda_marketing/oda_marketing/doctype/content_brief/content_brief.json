@@ -80,7 +80,7 @@
  "icon": "octicon octicon-file-text",
  "idx": 0,
  "links": [],
- "modified": "2026-08-03 00:30:00",
+ "modified": "2026-08-03 11:12:00",
  "modified_by": "Administrator",
  "module": "ODA Marketing",
  "name": "Content Brief",
@@ -112,7 +112,7 @@
    "write": 1
   },
   {
-   "create": 1,
+   "create": 0,
    "delete": 0,
    "email": 1,
    "export": 1,

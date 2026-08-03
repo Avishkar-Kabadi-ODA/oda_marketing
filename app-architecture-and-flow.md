@@ -18,20 +18,43 @@ graph TD
 
 ---
 
-## 2. Designated Approvers & Publisher Configuration
+## 2. Automatic App Hooks & Email Configuration
 
-The default operational roles are assigned to the following designated team email accounts:
+### Automatic Installation & Migration Setup
+The app registers standard Frappe lifecycle hooks in [hooks.py](file:///home/user/frappe-bench/apps/oda_marketing/oda_marketing/hooks.py):
+```python
+after_install = "oda_marketing.setup_fixtures.run_setup"
+after_migrate = "oda_marketing.setup_fixtures.run_setup"
+```
+Whenever `bench install-app oda_marketing` or `bench migrate` is run, all fixtures, email templates, workflow states, and settings are automatically initialized without requiring manual command execution.
 
-- **Technical Reviewer**: `Avishkar.Kabadi@optimumdataanalytics.com` (Avishkar Kabadi)
-- **Business Reviewer**: `vishwajeet.borade@optimumdataanalytics.com` (Vishwajeet Borade)
-- **Default Publisher**: `Mrudula.Saradar@optimumdataanalytics.com` (Mrudula Saradar)
-
-### Automatic Name Parsing (`firstname.lastname`)
-The email engine dynamically extracts human-readable names (`"Firstname Lastname"`) from user accounts or parses `firstname.lastname@domain.com` email strings as a fallback, ensuring every email greeting and status line renders full human names instead of raw system IDs or generic placeholders.
+### `Marketing Settings` Single DocType
+Includes 5 customizable template fields:
+- `writer_email_template` (`Marketing Writer Notification`)
+- `reviewer_email_template` (`Marketing Reviewer Notification`)
+- `publisher_email_template` (`Marketing Publisher Notification`)
+- `published_email_template` (`Marketing Published Notification` - New)
+- `overdue_sla_email_template` (`Marketing Overdue SLA Alert`)
+- `default_publisher` (`Mrudula.Saradar@optimumdataanalytics.com`)
 
 ---
 
-## 3. DocType Data Model Summary
+## 3. Email Recipient, CC & Greeting Protocol
+
+Access permissions and email dispatches use the exact user mapping matrix below:
+
+| Workflow State | Recipient (`recipients`) | CC (`cc`) | Template Used | Greeting & Content |
+| :--- | :--- | :--- | :--- | :--- |
+| **`Briefed`** | Content Writer (`assigned_to`) | Deliverable Creator (`owner`) | `writer_email_template` | `"Hello {{ assigned_to_name }}"`, brief review instructions & planned publish date |
+| **`In Review - Technical`** | Technical Reviewer (`reviewer_technical`) | Business Reviewer, Creator (`owner`), Default Publisher | `reviewer_email_template` | `"Hello {{ reviewer_technical_name }}"`, technical review request with draft links |
+| **`In Review - Business`** | Business Reviewer (`reviewer_business`) | Default Publisher, Creator (`owner`), Content Writer (`assigned_to`) | `reviewer_email_template` | `"Hello {{ reviewer_business_name }}"`, business review request with draft links |
+| **`In Revision`** | Content Writer (`assigned_to`) | Deliverable Creator (`owner`) | `writer_email_template` | `"Hello {{ assigned_to_name }}"`, revision requested with feedback notes |
+| **`Approved`** | Default Publisher (`default_publisher`) | Creator (`owner`), Content Writer (`assigned_to`) | `publisher_email_template` | `"Hello {{ publisher_name }}"`, deliverable approved for publishing |
+| **`Published`** | **Content Writer ONLY** (`assigned_to`) | None | `published_email_template` | `"Hello {{ assigned_to_name }}"`, congratulations email with live published URL |
+
+---
+
+## 4. DocType Data Model Summary
 
 ### 1. `Content Calendar` (Master Setup)
 - **Purpose**: Defines active marketing operational periods (e.g. *"2026 Global Marketing Calendar"*, Jan 1 – Dec 31). Modeled after Frappe HR's Holiday List.
@@ -58,21 +81,9 @@ The email engine dynamically extracts human-readable names (`"Firstname Lastname
 - **1 Brief Rule**: Only 1 `Content Brief` can exist per `Content Item`.
 - **Key Fields**: `content_item` (Link), `outline` (Rich text editor), `target_audience`, `primary_keyword`, `word_target`, `accepted_by_writer` (Check), `accepted_on` (Datetime).
 
-### 4. `Marketing Settings` (Central Configuration)
-- **Purpose**: Single DocType accessible under **Setup** in the workspace sidebar to configure global defaults, default publisher, and email templates.
-- **Key Fields**:
-  - `enable_email_notifications` (Checkbox master switch).
-  - `default_publisher` (`Mrudula.Saradar@optimumdataanalytics.com`).
-  - `writer_email_template` (Link: Email Template for assignments & revisions).
-  - `reviewer_email_template` (Link: Email Template for technical & business reviews).
-  - `publisher_email_template` (Link: Email Template for final approval & publishing).
-  - `overdue_sla_email_template` (Link: Email Template for late SLA alerts).
-
 ---
 
-## 4. Strict Role Permissions & Access Control Matrix
-
-Access permissions are enforced dynamically in `permissions.py` (record level), `content_item.py` (server validation), and `content_item.js` (client form control):
+## 5. Strict Role Permissions & Access Control Matrix
 
 | Role | Creation & Deletion Rights | Field-Level Edit Permissions | File Attachment Access |
 | :--- | :--- | :--- | :--- |
@@ -81,53 +92,6 @@ Access permissions are enforced dynamically in `permissions.py` (record level), 
 | **Content Writer** | **Blocked** (`create: 0, delete: 0`) | Core metadata fields are **read-only**. Can ONLY upload/edit draft attachments (`content_file_1`, `content_file_2`, `content_file_3`), add notes, check `accepted_by_writer` on brief, and transition state to `In Review`. | View, Download & Upload Draft Files. |
 | **Technical Reviewer** | **Blocked** (`create: 0, delete: 0`) | Core metadata & draft attachments are **read-only**. Can ONLY edit `revision_feedback_notes` when requesting changes and transition states (`Approve Technical`, `Request Changes`). | Full View & Download (Cannot Replace Writer Files). |
 | **Business Reviewer** | **Blocked** (`create: 0, delete: 0`) | Core metadata & draft attachments are **read-only**. Can ONLY edit `revision_feedback_notes` when requesting changes and transition states (`Approve Business`, `Request Changes`). | Full View & Download (Cannot Replace Writer Files). |
-
----
-
-## 5. End-to-End Operational Workflow & Email Recipient Rules
-
-The following state machine governs every deliverable from planning to publishing:
-
-```mermaid
-stateDiagram-v2
-    [*] --> Planned: Lead schedules Content Item
-    Planned --> Briefed: Lead issues Content Brief (Mandatory Brief Check)
-    Briefed --> InProgress: Writer reviews & checks 'Accepted By Writer'
-    InProgress --> InReviewTechnical: Writer uploads primary draft & submits (Mandatory File Check)
-    InReviewTechnical --> InRevision: Technical Reviewer requests changes (mandatory notes)
-    InReviewTechnical --> InReviewBusiness: Technical Reviewer approves technical
-    InReviewBusiness --> InRevision: Business Reviewer requests changes (mandatory notes)
-    InReviewBusiness --> Approved: Business Reviewer approves business
-    InRevision --> InReviewTechnical: Writer updates draft file & resubmits
-    Approved --> Published: Publisher / Lead publishes asset
-    Published --> [*]
-```
-
-### Detailed Notification Dispatch Protocol:
-
-1. **Briefing (`Planned` → `Briefed`)**:
-   - Recipient: **Content Writer** (`assigned_to`).
-   - Email: Informs writer of assignment, planned publish date, and instructions to accept Content Brief.
-
-2. **Technical Review Submission (`In Progress` → `In Review - Technical`)**:
-   - Recipients: **Technical Reviewer** (`Avishkar.Kabadi@optimumdataanalytics.com`), CC **Business Reviewer**.
-   - Email: Contains writer name, SLA due date, and clickable HTML links for populated attachment drafts.
-
-3. **Technical Review Approval (`In Review - Technical` → `In Review - Business`)**:
-   - Recipients: **Business Reviewer** (`vishwajeet.borade@optimumdataanalytics.com`) AND **Content Writer** (`assigned_to`).
-   - Email: Notifies writer that Technical Review passed and informs Business Reviewer to review the item.
-
-4. **Revision Requested (`In Review` → `In Revision`)**:
-   - Recipient: **Content Writer** (`assigned_to`).
-   - Email: Displays reviewer feedback notes and link to draft file.
-
-5. **Business Review Approval (`In Review - Business` → `Approved`)**:
-   - Recipients: **Default Publisher** (`Mrudula.Saradar@optimumdataanalytics.com`) AND **Content Writer** (`assigned_to`).
-   - Email: Notifies writer and publisher that deliverable is fully approved.
-
-6. **Publishing (`Approved` → `Published`)**:
-   - Recipients: **Content Writer** (`assigned_to`) AND **Default Publisher** (`Mrudula.Saradar@optimumdataanalytics.com`).
-   - Email: Notifies writer and publisher with live published URL link.
 
 ---
 

@@ -28,6 +28,7 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 		settings.writer_email_template = "Marketing Writer Notification"
 		settings.reviewer_email_template = "Marketing Reviewer Notification"
 		settings.publisher_email_template = "Marketing Publisher Notification"
+		settings.published_email_template = "Marketing Published Notification"
 		settings.overdue_sla_email_template = "Marketing Overdue SLA Alert"
 		settings.save()
 		frappe.db.commit()
@@ -258,4 +259,4 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 		self.assertEqual(item.workflow_state, "Published")
 
 		frappe.set_user("Administrator")
-		print("End-to-end multi-stage workflow, designated email testing, and writer notifications test passed successfully!")
+		print("End-to-end multi-stage workflow, dedicated published template, and notification routing test passed successfully!")

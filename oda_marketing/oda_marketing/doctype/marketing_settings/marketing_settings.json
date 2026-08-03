@@ -15,7 +15,8 @@
   "reviewer_email_template",
   "column_break_2",
   "publisher_email_template",
-  "overdue_sla_email_template"
+  "published_email_template",
+  "overdue_sla_em/ail_template"
  ],
  "fields": [
   {
@@ -33,7 +34,7 @@
    "default": "1",
    "fieldname": "enable_auto_overdue_flag",
    "fieldtype": "Check",
-   "label": "Enable Automatic Overdue SLA Flagging"
+   "label": "Enable Automatic Overdue Risk Flagging"
   },
   {
    "fieldname": "column_break_1",
@@ -42,7 +43,6 @@
   {
    "fieldname": "default_publisher",
    "fieldtype": "Link",
-   "in_list_view": 1,
    "label": "Default Publisher / Marketing Lead",
    "options": "User"
   },
@@ -55,20 +55,18 @@
   {
    "fieldname": "templates_section",
    "fieldtype": "Section Break",
-   "label": "Mandatory Email Templates Configuration"
+   "label": "Email Template Configuration"
   },
   {
    "fieldname": "writer_email_template",
    "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Writer Email Template",
+   "label": "Writer Notification Template",
    "options": "Email Template"
   },
   {
    "fieldname": "reviewer_email_template",
    "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Reviewer Email Template",
+   "label": "Reviewer Notification Template",
    "options": "Email Template"
   },
   {
@@ -78,15 +76,19 @@
   {
    "fieldname": "publisher_email_template",
    "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Publisher Email Template",
+   "label": "Publisher Approval Notification Template",
+   "options": "Email Template"
+  },
+  {
+   "fieldname": "published_email_template",
+   "fieldtype": "Link",
+   "label": "Published Notification Template",
    "options": "Email Template"
   },
   {
    "fieldname": "overdue_sla_email_template",
    "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Overdue SLA Escalation Template",
+   "label": "Overdue SLA Alert Template",
    "options": "Email Template"
   }
  ],
@@ -94,10 +96,11 @@
  "idx": 0,
  "issingle": 1,
  "links": [],
- "modified": "2026-08-03 11:05:00",
+ "modified": "2026-08-03 12:38:00",
  "modified_by": "Administrator",
  "module": "ODA Marketing",
  "name": "Marketing Settings",
+ "naming_rule": "Random",
  "owner": "Administrator",
  "permissions": [
   {
@@ -114,7 +117,7 @@
   },
   {
    "create": 1,
-   "delete": 0,
+   "delete": 1,
    "email": 1,
    "export": 1,
    "print": 1,

@@ -3,17 +3,23 @@
 
 frappe.ui.form.on("Marketing Settings", {
 	refresh(frm) {
-		frm.trigger("toggle_mandatory_templates");
+		frm.trigger("toggle_template_requirements");
 	},
+
 	enable_email_notifications(frm) {
-		frm.trigger("toggle_mandatory_templates");
+		frm.trigger("toggle_template_requirements");
 	},
-	toggle_mandatory_templates(frm) {
-		const enabled = frm.doc.enable_email_notifications ? 1 : 0;
-		frm.set_df_property("default_publisher", "reqd", enabled);
-		frm.set_df_property("writer_email_template", "reqd", enabled);
-		frm.set_df_property("reviewer_email_template", "reqd", enabled);
-		frm.set_df_property("publisher_email_template", "reqd", enabled);
-		frm.set_df_property("overdue_sla_email_template", "reqd", enabled);
+
+	toggle_template_requirements(frm) {
+		const reqd = frm.doc.enable_email_notifications ? 1 : 0;
+		const fields = [
+			"default_publisher",
+			"writer_email_template",
+			"reviewer_email_template",
+			"publisher_email_template",
+			"published_email_template",
+			"overdue_sla_email_template"
+		];
+		fields.forEach(field => frm.set_df_property(field, "reqd", reqd));
 	}
 });

@@ -79,10 +79,13 @@ def setup_email_templates_and_settings():
 		{
 			"name": "Marketing Reviewer Notification",
 			"subject": "[REVIEW NOTIFICATION] {{ doc.workflow_state }} for '{{ doc.title }}'",
-			"response": """<p>Hello <b>Team</b>,</p>
-<p>Content deliverable <b>{{ doc.title }}</b> (Type: {{ doc.content_type }}) status has updated to: <b>{{ doc.workflow_state }}</b>.</p>
+			"response": """<p>Hello <b>{% if doc.workflow_state == "In Review - Technical" %}{{ reviewer_technical_name }}{% else %}{{ reviewer_business_name }}{% endif %}</b>,</p>
+<p>Content deliverable <b>{{ doc.title }}</b> (Type: {{ doc.content_type }}) requires your signoff for status: <b>{{ doc.workflow_state }}</b>.</p>
 <ul>
-  <li><b>Writer:</b> {{ assigned_to_name }}</li>
+  <li><b>Assigned Writer:</b> {{ assigned_to_name }}</li>
+  <li><b>Created By:</b> {{ creator_name }}</li>
+  <li><b>Technical Reviewer:</b> {{ reviewer_technical_name }}</li>
+  <li><b>Business Reviewer:</b> {{ reviewer_business_name }}</li>
   <li><b>SLA Due Date:</b> {{ doc.sla_due_date }}</li>
   {% if content_file_1_link %}
     <li><b>Primary Content Draft:</b> {{ content_file_1_link }}</li>
@@ -94,33 +97,37 @@ def setup_email_templates_and_settings():
     <li><b>Supporting Asset 2:</b> {{ content_file_3_link }}</li>
   {% endif %}
 </ul>
-<p>Please log into the portal to review the status.</p>"""
+<p>Please log into the portal to review and take action.</p>"""
 		},
 		{
 			"name": "Marketing Publisher Notification",
-			"subject": "[PUBLISHING NOTIFICATION] Deliverable '{{ doc.title }}' Status: {{ doc.workflow_state }}",
-			"response": """<p>Hello <b>{{ publisher_name }}</b> / <b>{{ assigned_to_name }}</b>,</p>
-{% if doc.workflow_state == "Approved" %}
-  <p>Great news! The deliverable <b>{{ doc.title }}</b> has passed all technical and business reviews and is marked <b>Approved</b> for final publishing.</p>
-  <ul>
-    <li><b>Writer:</b> {{ assigned_to_name }}</li>
-    {% if content_file_1_link %}
-      <li><b>Primary Content Draft:</b> {{ content_file_1_link }}</li>
-    {% endif %}
-    {% if content_file_2_link %}
-      <li><b>Supporting Asset 1:</b> {{ content_file_2_link }}</li>
-    {% endif %}
-    {% if content_file_3_link %}
-      <li><b>Supporting Asset 2:</b> {{ content_file_3_link }}</li>
-    {% endif %}
-  </ul>
-  <p>Please log into the portal to publish this asset.</p>
-{% elif doc.workflow_state == "Published" %}
-  <p>Congratulations! The deliverable <b>{{ doc.title }}</b> has been published live.</p>
-  {% if doc.published_url %}
-    <p><b>Live Asset URL:</b> <a href="{{ doc.published_url }}" target="_blank">{{ doc.published_url }}</a></p>
+			"subject": "[PUBLISHING NOTIFICATION] Deliverable '{{ doc.title }}' Status: Approved for Publishing",
+			"response": """<p>Hello <b>{{ publisher_name }}</b>,</p>
+<p>Great news! The deliverable <b>{{ doc.title }}</b> has passed all technical review by <b>{{ reviewer_technical_name }}</b> and business review by <b>{{ reviewer_business_name }}</b> and is marked <b>Approved</b> for final publishing.</p>
+<ul>
+  <li><b>Assigned Writer:</b> {{ assigned_to_name }}</li>
+  <li><b>Created By:</b> {{ creator_name }}</li>
+  {% if content_file_1_link %}
+    <li><b>Primary Content Draft:</b> {{ content_file_1_link }}</li>
   {% endif %}
-{% endif %}"""
+  {% if content_file_2_link %}
+    <li><b>Supporting Asset 1:</b> {{ content_file_2_link }}</li>
+  {% endif %}
+  {% if content_file_3_link %}
+    <li><b>Supporting Asset 2:</b> {{ content_file_3_link }}</li>
+  {% endif %}
+</ul>
+<p>Please log into the portal to publish this asset.</p>"""
+		},
+		{
+			"name": "Marketing Published Notification",
+			"subject": "[CONGRATULATIONS] Deliverable '{{ doc.title }}' Has Been Published Live!",
+			"response": """<p>Hello <b>{{ assigned_to_name }}</b>,</p>
+<p>Congratulations! Your marketing deliverable <b>{{ doc.title }}</b> has been published live!</p>
+{% if doc.published_url %}
+  <p><b>Live Asset URL:</b> <a href="{{ doc.published_url }}" target="_blank">{{ doc.published_url }}</a></p>
+{% endif %}
+<p>Thank you for your hard work on this deliverable.</p>"""
 		},
 		{
 			"name": "Marketing Overdue SLA Alert",
@@ -151,7 +158,7 @@ def setup_email_templates_and_settings():
 			et.insert(ignore_permissions=True)
 			print(f"Created/Updated Email Template: {t['name']}")
 
-	# Pre-populate Marketing Settings Single DocType with designated users
+	# Pre-populate Marketing Settings Single DocType with designated users & templates
 	settings = frappe.get_single("Marketing Settings")
 	settings.enable_email_notifications = 1
 	settings.enable_auto_overdue_flag = 1
@@ -159,6 +166,7 @@ def setup_email_templates_and_settings():
 	settings.writer_email_template = "Marketing Writer Notification"
 	settings.reviewer_email_template = "Marketing Reviewer Notification"
 	settings.publisher_email_template = "Marketing Publisher Notification"
+	settings.published_email_template = "Marketing Published Notification"
 	settings.overdue_sla_email_template = "Marketing Overdue SLA Alert"
 	settings.save(ignore_permissions=True)
 	print("Pre-populated Marketing Settings with default publisher Mrudula.Saradar@optimumdataanalytics.com & templates.")

@@ -130,6 +130,7 @@ class ContentItem(Document):
 
 		context = {
 			"doc": self,
+			"creator_name": self.get_user_full_name(self.owner),
 			"assigned_to_name": self.get_user_full_name(self.assigned_to),
 			"reviewer_technical_name": self.get_user_full_name(self.reviewer_technical),
 			"reviewer_business_name": self.get_user_full_name(self.reviewer_business),
@@ -163,6 +164,8 @@ class ContentItem(Document):
 		if current_state == "Briefed":
 			if self.assigned_to:
 				recipients.add(self.assigned_to)
+			if self.owner and self.owner != self.assigned_to:
+				cc.add(self.owner)
 			template_name = settings.writer_email_template
 
 		elif current_state == "In Review - Technical":
@@ -170,37 +173,44 @@ class ContentItem(Document):
 				recipients.add(self.reviewer_technical)
 			if self.reviewer_business and self.reviewer_business != self.reviewer_technical:
 				cc.add(self.reviewer_business)
+			if self.owner and self.owner != self.reviewer_technical:
+				cc.add(self.owner)
+			if publisher_email and publisher_email != self.reviewer_technical:
+				cc.add(publisher_email)
 			template_name = settings.reviewer_email_template
 
 		elif current_state == "In Review - Business":
-			# Technical Review approved! Send email to Business Reviewer AND Writer
 			if self.reviewer_business:
 				recipients.add(self.reviewer_business)
-			if self.assigned_to:
-				recipients.add(self.assigned_to)
+			if publisher_email and publisher_email != self.reviewer_business:
+				cc.add(publisher_email)
+			if self.owner and self.owner != self.reviewer_business:
+				cc.add(self.owner)
+			if self.assigned_to and self.assigned_to != self.reviewer_business:
+				cc.add(self.assigned_to)
 			template_name = settings.reviewer_email_template
 
 		elif current_state == "In Revision":
-			# Revision requested! Send email to Writer
 			if self.assigned_to:
 				recipients.add(self.assigned_to)
+			if self.owner and self.owner != self.assigned_to:
+				cc.add(self.owner)
 			template_name = settings.writer_email_template
 
 		elif current_state == "Approved":
-			# Business Review approved! Send email to Publisher AND Writer
 			if publisher_email:
 				recipients.add(publisher_email)
-			if self.assigned_to:
-				recipients.add(self.assigned_to)
+			if self.owner and self.owner != publisher_email:
+				cc.add(self.owner)
+			if self.assigned_to and self.assigned_to != publisher_email:
+				cc.add(self.assigned_to)
 			template_name = settings.publisher_email_template
 
 		elif current_state == "Published":
-			# Deliverable Published! Send email to Writer AND Publisher
+			# Deliverable Published -> Send email to Content Writer ONLY
 			if self.assigned_to:
 				recipients.add(self.assigned_to)
-			if publisher_email:
-				recipients.add(publisher_email)
-			template_name = settings.publisher_email_template
+			template_name = getattr(settings, "published_email_template", None)
 
 		if recipients and template_name and frappe.db.exists("Email Template", template_name):
 			try:

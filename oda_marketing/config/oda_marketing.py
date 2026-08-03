@@ -16,12 +16,6 @@ def get_data():
 					"label": _("Content Calendar"),
 					"description": _("Plan and approve content campaigns."),
 				},
-				{
-					"type": "doctype",
-					"name": "Calendar Slot",
-					"label": _("Calendar Slot"),
-					"description": _("Individual scheduled content slots."),
-				},
 			],
 		},
 		{
@@ -33,12 +27,6 @@ def get_data():
 					"name": "Content Item",
 					"label": _("Content Item"),
 					"description": _("Track items through the 8-state workflow."),
-				},
-				{
-					"type": "doctype",
-					"name": "Content Brief",
-					"label": _("Content Brief"),
-					"description": _("Creative briefs and key requirements."),
 				},
 			],
 		},

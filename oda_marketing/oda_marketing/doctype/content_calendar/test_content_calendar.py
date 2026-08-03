@@ -55,12 +55,6 @@ class TestContentCalendar(FrappeTestCase):
 			self.assertEqual(item.workflow_state, "Planned")
 			self.assertEqual(item.content_calendar, calendar.name)
 
-			# Verify Content Brief creation
-			self.assertTrue(bool(item.content_brief))
-			brief = frappe.get_doc("Content Brief", item.content_brief)
-			self.assertEqual(brief.content_item, item.name)
-			self.assertIn("Brief:", brief.brief_title)
-
 	def test_content_item_workflow_transitions(self):
 		item = frappe.get_doc({
 			"doctype": "Content Item",

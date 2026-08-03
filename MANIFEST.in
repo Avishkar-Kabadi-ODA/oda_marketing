@@ -1,0 +1,18 @@
+include MANIFEST.in
+include requirements.txt
+include *.json
+include *.md
+include *.py
+include *.txt
+recursive-include oda_marketing *.css
+recursive-include oda_marketing *.csv
+recursive-include oda_marketing *.html
+recursive-include oda_marketing *.ico
+recursive-include oda_marketing *.js
+recursive-include oda_marketing *.json
+recursive-include oda_marketing *.md
+recursive-include oda_marketing *.png
+recursive-include oda_marketing *.py
+recursive-include oda_marketing *.svg
+recursive-include oda_marketing *.txt
+recursive-exclude oda_marketing *.pyc

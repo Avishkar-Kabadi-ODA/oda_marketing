@@ -74,9 +74,9 @@ Frappe supports three primary DocType architectures:
 
 | DocType Type | Purpose | Example in App |
 | :--- | :--- | :--- |
-| **Standard DocType** | Standalone master/transaction record with database table | `Content Item`, `Content Brief` |
+| **Standard DocType** | Standalone master/transaction record with database table | `Content Item`, `Content Calendar` |
 | **Single DocType** | Global application settings / configuration (1 record system-wide) | `Marketing Settings` |
-| **Child Table** | Grid table embedded inside a parent DocType | `Calendar Slot` |
+| **Child Table** | Grid table embedded inside a parent DocType | Standard child grid tables |
 
 ### Step 3.1: Creating a Standard DocType
 1. Navigate to **DocType List** → Click **Add DocType**.

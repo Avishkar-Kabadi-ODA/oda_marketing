@@ -58,9 +58,9 @@ def setup_email_templates_and_settings():
 			"subject": "[TASK NOTIFICATION] Deliverable '{{ doc.title }}' Status: {{ doc.workflow_state }}",
 			"response": """<p>Hello <b>{{ assigned_to_name }}</b>,</p>
 {% if doc.workflow_state == "Briefed" %}
-  <p>You have been assigned to create the content deliverable <b>{{ doc.title }}</b> (Type: {{ doc.content_type }}). A Content Brief has been issued for your review.</p>
+  <p>You have been assigned to create the content deliverable <b>{{ doc.title }}</b> (Type: {{ doc.content_type }}). Task details have been issued for your review.</p>
   <p><b>Planned Publish Date:</b> {{ doc.planned_publish_date }}</p>
-  <p>Please log into the portal, review the Content Brief, and check <b>'Accepted By Writer'</b> to begin drafting.</p>
+  <p>Please log into the portal, review the task details, and proceed with drafting.</p>
 {% elif doc.workflow_state == "In Revision" %}
   <p>Revisions have been requested for your deliverable <b>{{ doc.title }}</b>.</p>
   {% if doc.revision_feedback_notes %}
@@ -275,9 +275,7 @@ def setup_kanban_board():
 
 def clear_and_seed_data():
 	print("Clearing old dummy records...")
-	frappe.db.delete("Content Brief")
 	frappe.db.delete("Content Item")
-	frappe.db.delete("Calendar Slot")
 	frappe.db.delete("Content Calendar")
 	frappe.db.commit()
 
@@ -388,25 +386,11 @@ def clear_and_seed_data():
 		})
 		item.insert(ignore_permissions=True)
 
-		# Create linked brief for items
-		brief = frappe.get_doc({
-			"doctype": "Content Brief",
-			"content_item": item.name,
-			"outline": f"Detailed executive brief for topic: {data['title']}",
-			"target_audience": f"VPs and Directors in {data['practice_area']}",
-			"primary_keyword": data["practice_area"].lower() + " ai analytics",
-			"word_target": 1500,
-			"accepted_by_writer": 1 if data["target_state"] in ["In Progress", "In Review - Technical", "In Review - Business", "Approved", "Published"] else 0
-		})
-		brief.insert(ignore_permissions=True)
-
-		item.db_set("content_brief", brief.name)
-
 		if data["target_state"] != "Planned":
 			item.db_set("workflow_state", data["target_state"])
 
 	frappe.db.commit()
-	print(f"Seeded {len(sample_items)} realistic Content Items with briefs.")
+	print(f"Seeded {len(sample_items)} realistic Content Items.")
 
 
 def setup_workspace_sidebar():
@@ -427,14 +411,6 @@ def setup_workspace_sidebar():
 			"link_to": "Content Item",
 			"label": "Content Item",
 			"icon": "calendar",
-			"child": 0,
-		},
-		{
-			"type": "Link",
-			"link_type": "DocType",
-			"link_to": "Content Brief",
-			"label": "Content Brief",
-			"icon": "file-text",
 			"child": 0,
 		},
 		{

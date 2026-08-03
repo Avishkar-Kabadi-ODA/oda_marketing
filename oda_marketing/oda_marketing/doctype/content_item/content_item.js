@@ -5,19 +5,6 @@ frappe.ui.form.on("Content Item", {
 	refresh(frm) {
 		frm.trigger("apply_role_field_permissions");
 
-		if (frm.doc.content_brief) {
-			frm.add_custom_button(__("View Content Brief"), function() {
-				frappe.set_route("Form", "Content Brief", frm.doc.content_brief);
-			}, __("Actions"));
-		} else if (!frm.doc.__islocal && (frappe.user.has_role("Marketing Lead") || frappe.user.has_role("System Manager"))) {
-			frm.add_custom_button(__("Create Content Brief"), function() {
-				frappe.route_options = {
-					"content_item": frm.doc.name
-				};
-				frappe.new_doc("Content Brief");
-			}, __("Actions"));
-		}
-
 		if (frm.doc.content_calendar) {
 			frm.add_custom_button(__("View Content Calendar"), function() {
 				frappe.set_route("Form", "Content Calendar", frm.doc.content_calendar);

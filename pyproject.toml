@@ -4,7 +4,7 @@ authors = [
     { name = "Optimum Data Analytics", email = "info@optimumdataanalytics.com"}
 ]
 description = "Agentic marketing operations platform for ODA"
-requires-python = ">=3.14"
+requires-python = ">=3.10"
 readme = "README.md"
 dynamic = ["version"]
 dependencies = [

@@ -21,7 +21,6 @@
   "content_file_1",
   "content_file_2",
   "content_file_3",
-  "content_brief",
   "column_break_2",
   "sla_due_date",
   "risk_flag",
@@ -144,13 +143,6 @@
    "fieldname": "content_file_3",
    "fieldtype": "Attach",
    "label": "Writer's Supporting Asset 2 (Optional)"
-  },
-  {
-   "fieldname": "content_brief",
-   "fieldtype": "Link",
-   "label": "Linked Content Brief",
-   "options": "Content Brief",
-   "read_only": 1
   },
   {
    "fieldname": "column_break_2",

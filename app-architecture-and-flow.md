@@ -6,12 +6,11 @@ This document explains the current system architecture, data model, user roles, 
 
 ## 1. Overview & Core Architecture
 
-The ODA Marketing platform manages the end-to-end lifecycle of enterprise marketing deliverables (Blogs, Polls, Flowcharts, Carousels). It provides structured planning, mandatory content brief gates, automatic brief-to-item mapping, unbriefed dropdown filters, attachment requirement rules, multi-stage sequential reviews, mandatory feedback tracking, strict role permission controls, default publisher settings, and automated SLA email alerts.
+The ODA Marketing platform manages the end-to-end lifecycle of enterprise marketing deliverables (Blogs, Polls, Flowcharts, Carousels). It provides structured planning, attachment requirement rules, multi-stage sequential reviews, mandatory feedback tracking, strict role permission controls, default publisher settings, and automated SLA email alerts.
 
 ```mermaid
 graph TD
     A[Content Calendar] -->|Master Setup| B[Content Item]
-    B -->|Linked Creative Blueprint| C[Content Brief]
     D[Marketing Settings] -->|Controls Email Templates & Default Publisher| E[Automated Email Engine]
     B -->|Triggers Notifications| E
 ```
@@ -45,7 +44,7 @@ Access permissions and email dispatches use the exact user mapping matrix below:
 
 | Workflow State | Recipient (`recipients`) | CC (`cc`) | Template Used | Greeting & Content |
 | :--- | :--- | :--- | :--- | :--- |
-| **`Briefed`** | Content Writer (`assigned_to`) | Deliverable Creator (`owner`) | `writer_email_template` | `"Hello {{ assigned_to_name }}"`, brief review instructions & planned publish date |
+| **`Briefed`** | Content Writer (`assigned_to`) | Deliverable Creator (`owner`) | `writer_email_template` | `"Hello {{ assigned_to_name }}"`, task instructions & planned publish date |
 | **`In Review - Technical`** | Technical Reviewer (`reviewer_technical`) | Business Reviewer, Creator (`owner`), Default Publisher | `reviewer_email_template` | `"Hello {{ reviewer_technical_name }}"`, technical review request with draft links |
 | **`In Review - Business`** | Business Reviewer (`reviewer_business`) | Default Publisher, Creator (`owner`), Content Writer (`assigned_to`) | `reviewer_email_template` | `"Hello {{ reviewer_business_name }}"`, business review request with draft links |
 | **`In Revision`** | Content Writer (`assigned_to`) | Deliverable Creator (`owner`) | `writer_email_template` | `"Hello {{ assigned_to_name }}"`, revision requested with feedback notes |
@@ -73,14 +72,6 @@ Access permissions and email dispatches use the exact user mapping matrix below:
     - `content_file_3` (Attach - Writer's Supporting Asset 2 (Optional)).
   - `revision_feedback_notes` (Mandatory notes required when requesting changes).
 
-### 3. `Content Brief` (Creative Blueprint)
-- **Purpose**: Creative instructions and SEO guidelines created by the Marketing Lead for the writer.
-- **Automatic Database Write-Back**: Saving a `Content Brief` automatically writes its ID back to `Content Item.content_brief` in MariaDB via Python controller.
-- **Unbriefed Item Filter**: Creating a brief from the Content Brief tab filters the dropdown to show **ONLY Content Items without a brief yet**.
-- **Auto-Redirect Flow**: Saving a brief automatically alerts the user and redirects back to the `Content Item` form so the Marketing Lead can click **`Issue Brief`**.
-- **1 Brief Rule**: Only 1 `Content Brief` can exist per `Content Item`.
-- **Key Fields**: `content_item` (Link), `outline` (Rich text editor), `target_audience`, `primary_keyword`, `word_target`, `accepted_by_writer` (Check), `accepted_on` (Datetime).
-
 ---
 
 ## 5. Strict Role Permissions & Access Control Matrix
@@ -89,7 +80,7 @@ Access permissions and email dispatches use the exact user mapping matrix below:
 | :--- | :--- | :--- | :--- |
 | **Marketing Lead** | Full (`create: 1, delete: 1`) | Full edit access to all metadata, calendar, and publishing fields. | Full View, Download & Replace. |
 | **Default Publisher** | Full (`create: 1, delete: 1`) | Can view all deliverables and edit publishing details. | Full View & Download. |
-| **Content Writer** | **Blocked** (`create: 0, delete: 0`) | Core metadata fields are **read-only**. Can ONLY upload/edit draft attachments (`content_file_1`, `content_file_2`, `content_file_3`), add notes, check `accepted_by_writer` on brief, and transition state to `In Review`. | View, Download & Upload Draft Files. |
+| **Content Writer** | **Blocked** (`create: 0, delete: 0`) | Core metadata fields are **read-only**. Can ONLY upload/edit draft attachments (`content_file_1`, `content_file_2`, `content_file_3`), add notes, and transition state to `In Review`. | View, Download & Upload Draft Files. |
 | **Technical Reviewer** | **Blocked** (`create: 0, delete: 0`) | Core metadata & draft attachments are **read-only**. Can ONLY edit `revision_feedback_notes` when requesting changes and transition states (`Approve Technical`, `Request Changes`). | Full View & Download (Cannot Replace Writer Files). |
 | **Business Reviewer** | **Blocked** (`create: 0, delete: 0`) | Core metadata & draft attachments are **read-only**. Can ONLY edit `revision_feedback_notes` when requesting changes and transition states (`Approve Business`, `Request Changes`). | Full View & Download (Cannot Replace Writer Files). |
 
@@ -101,8 +92,7 @@ Access permissions and email dispatches use the exact user mapping matrix below:
 ODA Marketing
 │
 ├── Content Execution
-│   ├── Content Item (Calendar & List Views)
-│   └── Content Brief
+│   └── Content Item (Calendar & List Views)
 │
 └── Setup
     ├── Content Calendar (Master Calendar Setup)

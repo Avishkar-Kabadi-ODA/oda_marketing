@@ -25,12 +25,10 @@ add_to_apps_screen = [
 # Permission Hooks (Strict User Involvement Scoping)
 permission_query_conditions = {
 	"Content Item": "oda_marketing.permissions.get_content_item_permission_query_conditions",
-	"Content Brief": "oda_marketing.permissions.get_content_brief_permission_query_conditions",
 }
 
 has_permission = {
 	"Content Item": "oda_marketing.permissions.has_content_item_permission",
-	"Content Brief": "oda_marketing.permissions.has_content_brief_permission",
 }
 
 # Scheduled Events (Overdue SLA Engine)

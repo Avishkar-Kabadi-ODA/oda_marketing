@@ -15,7 +15,6 @@ class ContentItem(Document):
 		self.validate_publish_date_with_calendar()
 		self.calculate_sla_due_date()
 		self.check_overdue_sla()
-		self.validate_content_brief_mandatory()
 		self.validate_primary_attachment_mandatory()
 		self.validate_revision_notes()
 
@@ -90,10 +89,6 @@ class ContentItem(Document):
 		if self.sla_due_date and getattr(self, "workflow_state", None) not in ["Approved", "Published"]:
 			if getdate(nowdate()) > getdate(self.sla_due_date):
 				self.risk_flag = "Late"
-
-	def validate_content_brief_mandatory(self):
-		if getattr(self, "workflow_state", None) == "Briefed" and not self.content_brief:
-			frappe.throw(_("<b>Content Brief is mandatory</b> before issuing a brief or setting status to 'Briefed'. Please create and link a Content Brief first."))
 
 	def validate_primary_attachment_mandatory(self):
 		if getattr(self, "workflow_state", None) == "In Review - Technical" and not self.content_file_1:

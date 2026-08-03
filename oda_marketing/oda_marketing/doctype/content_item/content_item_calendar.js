@@ -10,10 +10,10 @@ frappe.views.calendar["Content Item"] = {
 	style_map: {
 		"Planned": "info",
 		"Briefed": "info",
-		"Drafting": "warning",
-		"Draft Submitted": "warning",
-		"In Review": "warning",
-		"Revision": "danger",
+		"In Progress": "warning",
+		"In Review - Technical": "warning",
+		"In Review - Business": "purple",
+		"In Revision": "danger",
 		"Approved": "success",
 		"Published": "success"
 	},

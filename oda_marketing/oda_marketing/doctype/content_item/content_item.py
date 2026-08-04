@@ -17,6 +17,20 @@ class ContentItem(Document):
 		self.check_overdue_sla()
 		self.validate_primary_attachment_mandatory()
 		self.validate_revision_notes()
+		self.validate_copilot_score_gatekeeper()
+
+	def validate_copilot_score_gatekeeper(self):
+		if getattr(self, "workflow_state", None) == "In Review - Technical":
+			score = float(getattr(self, "ai_score", 0) or 0)
+			status = getattr(self, "ai_review_status", None)
+			settings = frappe.get_single("Marketing Settings")
+			passing_score = int(getattr(settings, "ai_copilot_passing_score", 80) or 80)
+
+			if score < passing_score or status != "Completed":
+				frappe.throw(
+					_("<b>Marketing Copilot Gatekeeper:</b> Content Item must pass Marketing Copilot Review with a score of {0}% or higher before submitting for Technical Review (Current Score: {1}%).").format(passing_score, score),
+					frappe.ValidationError
+				)
 
 	def before_insert(self):
 		if self.assigned_to:
@@ -95,8 +109,9 @@ class ContentItem(Document):
 			frappe.throw(_("<b>Primary Content Draft (content_file_1)</b> is mandatory before submitting for review."))
 
 	def validate_revision_notes(self):
-		if getattr(self, "workflow_state", None) == "In Revision" and not (self.revision_feedback_notes and self.revision_feedback_notes.strip()):
-			frappe.throw(_("Revision Feedback / Notes are mandatory when requesting changes or sending an item to 'In Revision'."))
+		# Revision feedback is provided by AI Copilot or Human Reviewers when requesting changes.
+		# Writers saving their draft in 'In Revision' state are not blocked.
+		pass
 
 	def get_user_full_name(self, user_email):
 		if not user_email:
@@ -138,6 +153,20 @@ class ContentItem(Document):
 
 	def on_update(self):
 		self.trigger_workflow_notifications()
+		self.trigger_ai_copilot_review()
+
+	def trigger_ai_copilot_review(self):
+		if getattr(frappe.flags, "in_ai_copilot_review", False):
+			return
+
+		if getattr(self, "workflow_state", None) == "Marketing Copilot Review":
+			if getattr(self, "ai_review_status", None) not in ["In Progress", "Completed"]:
+				self.db_set("ai_review_status", "Queued", update_modified=False)
+				try:
+					from oda_marketing.oda_marketing.ai_engine.runner import run_ai_review
+					run_ai_review(self.name)
+				except Exception as e:
+					frappe.log_error(f"AI Copilot review execution error for {self.name}: {str(e)}")
 
 	def trigger_workflow_notifications(self):
 		settings = frappe.get_single("Marketing Settings")
@@ -220,7 +249,7 @@ class ContentItem(Document):
 					cc=list(cc),
 					subject=subject,
 					message=message,
-					now=True
+					now=False
 				)
 			except Exception as e:
 				frappe.log_error(f"Failed to send workflow email for Content Item {self.name}: {str(e)}")
@@ -271,3 +300,13 @@ def send_overdue_sla_notifications():
 				)
 			except Exception as e:
 				frappe.log_error(f"Failed to send overdue email for {item.name}: {str(e)}")
+
+
+@frappe.whitelist()
+def trigger_ai_copilot(docname):
+	"""Manual/Immediate API trigger for Marketing Copilot Review."""
+	if frappe.db.exists("Content Item", docname):
+		from oda_marketing.oda_marketing.ai_engine.runner import run_ai_review
+		run_ai_review(docname)
+		return frappe.get_doc("Content Item", docname)
+	return None

@@ -21,15 +21,19 @@
   "content_file_1",
   "content_file_2",
   "content_file_3",
+  "notes",
+  "ai_section",
+  "ai_score",
+  "ai_review_status",
+  "ai_copilot_feedback",
+  "ai_generated_prompt",
   "column_break_2",
   "sla_due_date",
   "risk_flag",
   "published_url",
   "sharepoint_folder_url",
   "feedback_section",
-  "revision_feedback_notes",
-  "notes_section",
-  "notes"
+  "revision_feedback_notes"
  ],
  "fields": [
   {
@@ -55,7 +59,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Status",
-   "options": "Planned\nBriefed\nIn Progress\nIn Review - Technical\nIn Review - Business\nIn Revision\nApproved\nPublished",
+   "options": "Planned\nBriefed\nIn Progress\nMarketing Copilot Review\nIn Review - Technical\nIn Review - Business\nIn Revision\nApproved\nPublished",
    "read_only": 1
   },
   {
@@ -195,6 +199,40 @@
    "fieldname": "notes",
    "fieldtype": "Text Editor",
    "label": "Notes"
+  },
+  {
+   "fieldname": "ai_section",
+   "fieldtype": "Section Break",
+   "label": "Marketing Copilot AI Evaluation"
+  },
+  {
+   "fieldname": "ai_score",
+   "fieldtype": "Percent",
+   "in_list_view": 1,
+   "label": "AI Quality Score (%)",
+   "read_only": 1
+  },
+  {
+   "default": "Not Started",
+   "fieldname": "ai_review_status",
+   "fieldtype": "Select",
+   "label": "AI Evaluation Status",
+   "options": "Not Started\nQueued\nIn Progress\nCompleted\nFailed",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.ai_copilot_feedback && (frappe.session.user === doc.assigned_to || frappe.session.user === doc.owner || frappe.user.has_role('Marketing Lead') || frappe.user.has_role('System Manager') || frappe.session.user === 'Administrator')",
+   "fieldname": "ai_copilot_feedback",
+   "fieldtype": "Text Editor",
+   "label": "AI Copilot Feedback & Improvements",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:frappe.user.has_role('Marketing Lead') || frappe.user.has_role('System Manager') || frappe.session.user === 'Administrator'",
+   "fieldname": "ai_generated_prompt",
+   "fieldtype": "Code",
+   "label": "System Prompt (Subagent Generated - Lead Only)",
+   "read_only": 1
   }
  ],
  "icon": "list-checks",

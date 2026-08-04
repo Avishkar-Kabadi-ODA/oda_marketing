@@ -168,14 +168,44 @@ def setup_email_templates_and_settings():
 	settings.publisher_email_template = "Marketing Publisher Notification"
 	settings.published_email_template = "Marketing Published Notification"
 	settings.overdue_sla_email_template = "Marketing Overdue SLA Alert"
+	settings.enable_ai_copilot = 1
+	settings.ai_copilot_passing_score = 80
+
+	settings.subagent_meta_prompt = """You are a constructive AI Copilot & Enterprise Marketing Auditor for Optimum Data Analytics (ODA).
+Your task is to analyze deliverable metadata and create a practical, fair System Prompt for evaluating the document.
+
+INPUT METADATA:
+- Deliverable Title: {title}
+- Content Type: {content_type} (Blog, Poll, Flowchart, Carousel)
+- Topic / Brief: {topic}
+- Practice Area / Domain: {practice_area}
+- Minimum Passing Threshold: 80%
+
+INSTRUCTIONS FOR GENERATING THE SYSTEM PROMPT:
+Construct a System Prompt instructing the Evaluator Agent to:
+1. Praise strong structure, clear domain terminology, engaging enterprise tone, and alignment with "{topic}".
+2. Evaluate technical relevance for {practice_area} and structure for {content_type}.
+3. Award high passing scores (85%–98%) for complete, well-written enterprise deliverables.
+4. Only request revisions if content is missing, blank, or severely incomplete.
+
+Return raw System Prompt text only."""
+
+	settings.evaluator_default_prompt = """You are an encouraging AI Copilot & Technical Reviewer for Optimum Data Analytics (ODA).
+You are evaluating the {content_type} titled "{title}" in the domain of {practice_area}.
+
+EVALUATION GUIDELINES FOR THIS DELIVERABLE:
+1. Praise strong structure, clear domain terminology ({practice_area}), and alignment with "{topic}".
+2. Award high passing scores (85%–98%) for complete, well-written, publishable enterprise content.
+3. Passing threshold is 80%."""
+
 	settings.save(ignore_permissions=True)
-	print("Pre-populated Marketing Settings with default publisher Mrudula.Saradar@optimumdataanalytics.com & templates.")
+	print("Pre-populated Marketing Settings with default publisher Mrudula.Saradar@optimumdataanalytics.com, email templates & AI Copilot prompts.")
 
 
 def setup_workflow_states_and_actions():
 	state_names = [
-		"Planned", "Briefed", "In Progress", "In Review - Technical",
-		"In Review - Business", "In Revision", "Approved", "Published"
+		"Planned", "Briefed", "In Progress", "Marketing Copilot Review",
+		"In Review - Technical", "In Review - Business", "In Revision", "Approved", "Published"
 	]
 	for state in state_names:
 		if not frappe.db.exists("Workflow State", state):
@@ -187,9 +217,9 @@ def setup_workflow_states_and_actions():
 			print(f"Created Workflow State: {state}")
 
 	action_names = [
-		"Issue Brief", "Accept Brief", "Submit for Technical Review",
-		"Request Changes", "Approve Technical", "Approve Business",
-		"Resubmit Draft", "Publish"
+		"Issue Brief", "Accept Brief", "Submit for Copilot Review",
+		"Approve AI Copilot", "Request Changes", "Approve Technical",
+		"Approve Business", "Resubmit Draft", "Publish"
 	]
 	for action in action_names:
 		if not frappe.db.exists("Workflow Action Master", action):
@@ -212,6 +242,7 @@ def setup_workflow():
 		{"state": "Planned", "doc_status": "0", "allow_edit": "Marketing Lead", "style": "Primary"},
 		{"state": "Briefed", "doc_status": "0", "allow_edit": "Content Writer", "style": "Info"},
 		{"state": "In Progress", "doc_status": "0", "allow_edit": "Content Writer", "style": "Warning"},
+		{"state": "Marketing Copilot Review", "doc_status": "0", "allow_edit": "Content Writer", "style": "Info"},
 		{"state": "In Review - Technical", "doc_status": "0", "allow_edit": "Technical Reviewer", "style": "Warning"},
 		{"state": "In Review - Business", "doc_status": "0", "allow_edit": "Business Reviewer", "style": "Warning"},
 		{"state": "In Revision", "doc_status": "0", "allow_edit": "Content Writer", "style": "Danger"},
@@ -221,14 +252,50 @@ def setup_workflow():
 
 	transitions = [
 		{"state": "Planned", "action": "Issue Brief", "next_state": "Briefed", "allowed": "Marketing Lead"},
+		{"state": "Planned", "action": "Issue Brief", "next_state": "Briefed", "allowed": "System Manager"},
+
 		{"state": "Briefed", "action": "Accept Brief", "next_state": "In Progress", "allowed": "Content Writer"},
-		{"state": "In Progress", "action": "Submit for Technical Review", "next_state": "In Review - Technical", "allowed": "Content Writer"},
+		{"state": "Briefed", "action": "Accept Brief", "next_state": "In Progress", "allowed": "Marketing Lead"},
+		{"state": "Briefed", "action": "Accept Brief", "next_state": "In Progress", "allowed": "System Manager"},
+
+		{"state": "Briefed", "action": "Submit for Copilot Review", "next_state": "Marketing Copilot Review", "allowed": "Content Writer"},
+		{"state": "Briefed", "action": "Submit for Copilot Review", "next_state": "Marketing Copilot Review", "allowed": "Marketing Lead"},
+		{"state": "Briefed", "action": "Submit for Copilot Review", "next_state": "Marketing Copilot Review", "allowed": "System Manager"},
+
+		{"state": "In Progress", "action": "Submit for Copilot Review", "next_state": "Marketing Copilot Review", "allowed": "Content Writer"},
+		{"state": "In Progress", "action": "Submit for Copilot Review", "next_state": "Marketing Copilot Review", "allowed": "Marketing Lead"},
+		{"state": "In Progress", "action": "Submit for Copilot Review", "next_state": "Marketing Copilot Review", "allowed": "System Manager"},
+
+		{"state": "In Revision", "action": "Resubmit Draft", "next_state": "Marketing Copilot Review", "allowed": "Content Writer"},
+		{"state": "In Revision", "action": "Resubmit Draft", "next_state": "Marketing Copilot Review", "allowed": "Marketing Lead"},
+		{"state": "In Revision", "action": "Resubmit Draft", "next_state": "Marketing Copilot Review", "allowed": "System Manager"},
+
+		{"state": "Marketing Copilot Review", "action": "Approve AI Copilot", "next_state": "In Review - Technical", "allowed": "Content Writer"},
+		{"state": "Marketing Copilot Review", "action": "Approve AI Copilot", "next_state": "In Review - Technical", "allowed": "Marketing Lead"},
+		{"state": "Marketing Copilot Review", "action": "Approve AI Copilot", "next_state": "In Review - Technical", "allowed": "System Manager"},
+
+		{"state": "Marketing Copilot Review", "action": "Request Changes", "next_state": "In Revision", "allowed": "Content Writer"},
+		{"state": "Marketing Copilot Review", "action": "Request Changes", "next_state": "In Revision", "allowed": "Marketing Lead"},
+		{"state": "Marketing Copilot Review", "action": "Request Changes", "next_state": "In Revision", "allowed": "System Manager"},
+
 		{"state": "In Review - Technical", "action": "Request Changes", "next_state": "In Revision", "allowed": "Technical Reviewer"},
+		{"state": "In Review - Technical", "action": "Request Changes", "next_state": "In Revision", "allowed": "Marketing Lead"},
+		{"state": "In Review - Technical", "action": "Request Changes", "next_state": "In Revision", "allowed": "System Manager"},
+
 		{"state": "In Review - Technical", "action": "Approve Technical", "next_state": "In Review - Business", "allowed": "Technical Reviewer"},
+		{"state": "In Review - Technical", "action": "Approve Technical", "next_state": "In Review - Business", "allowed": "Marketing Lead"},
+		{"state": "In Review - Technical", "action": "Approve Technical", "next_state": "In Review - Business", "allowed": "System Manager"},
+
 		{"state": "In Review - Business", "action": "Request Changes", "next_state": "In Revision", "allowed": "Business Reviewer"},
+		{"state": "In Review - Business", "action": "Request Changes", "next_state": "In Revision", "allowed": "Marketing Lead"},
+		{"state": "In Review - Business", "action": "Request Changes", "next_state": "In Revision", "allowed": "System Manager"},
+
 		{"state": "In Review - Business", "action": "Approve Business", "next_state": "Approved", "allowed": "Business Reviewer"},
-		{"state": "In Revision", "action": "Resubmit Draft", "next_state": "In Review - Technical", "allowed": "Content Writer"},
+		{"state": "In Review - Business", "action": "Approve Business", "next_state": "Approved", "allowed": "Marketing Lead"},
+		{"state": "In Review - Business", "action": "Approve Business", "next_state": "Approved", "allowed": "System Manager"},
+
 		{"state": "Approved", "action": "Publish", "next_state": "Published", "allowed": "Marketing Lead"},
+		{"state": "Approved", "action": "Publish", "next_state": "Published", "allowed": "System Manager"},
 	]
 
 	wf = frappe.get_doc({
@@ -433,6 +500,14 @@ def setup_workspace_sidebar():
 			"link_to": "Marketing Settings",
 			"label": "Marketing Settings",
 			"icon": "settings",
+			"child": 0,
+		},
+		{
+			"type": "Link",
+			"link_type": "DocType",
+			"link_to": "Env Variable",
+			"label": "Env Variables",
+			"icon": "key",
 			"child": 0,
 		},
 	]

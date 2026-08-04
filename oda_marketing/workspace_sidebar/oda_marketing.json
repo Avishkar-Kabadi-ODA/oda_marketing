@@ -62,9 +62,21 @@
    "link_type": "DocType",
    "show_arrow": 0,
    "type": "Link"
+  },
+  {
+   "child": 0,
+   "collapsible": 1,
+   "icon": "key",
+   "indent": 0,
+   "keep_closed": 0,
+   "label": "Env Variables",
+   "link_to": "Env Variable",
+   "link_type": "DocType",
+   "show_arrow": 0,
+   "type": "Link"
   }
  ],
- "modified": "2026-08-03 18:08:01.229742",
+ "modified": "2026-08-04 12:38:28.269768",
  "modified_by": "Administrator",
  "name": "ODA Marketing",
  "owner": "Administrator",

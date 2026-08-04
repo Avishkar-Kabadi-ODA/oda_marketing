@@ -28,7 +28,7 @@ def get_content_item_permission_query_conditions(user):
 		return ""
 
 	user_esc = frappe.db.escape(user_lower)
-	return f"(LOWER(`tabContent Item`.assigned_to) = {user_esc} OR LOWER(`tabContent Item`.reviewer_technical) = {user_esc} OR LOWER(`tabContent Item`.reviewer_business) = {user_esc} OR LOWER(`tabContent Item`.owner) = {user_esc})"
+	return f"(LOWER(`tabContent Item`.assigned_to) = {user_esc} OR LOWER(`tabContent Item`.reviewer_technical) = {user_esc} OR LOWER(`tabContent Item`.owner) = {user_esc})"
 
 
 def has_content_item_permission(doc, ptype="read", user=None):
@@ -45,10 +45,9 @@ def has_content_item_permission(doc, ptype="read", user=None):
 
 	assigned = (doc.assigned_to or "").lower()
 	tech_rev = (doc.reviewer_technical or "").lower()
-	biz_rev = (doc.reviewer_business or "").lower()
 	owner = (doc.owner or "").lower()
 
-	if user_lower in [assigned, tech_rev, biz_rev, owner]:
+	if user_lower in [assigned, tech_rev, owner]:
 		return True
 
 	return False

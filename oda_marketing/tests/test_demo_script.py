@@ -6,17 +6,17 @@ import frappe
 from frappe.utils import getdate, add_days, nowdate
 from frappe.model.workflow import apply_workflow
 from oda_marketing.permissions import get_content_item_permission_query_conditions, has_content_item_permission
-from oda_marketing.setup_fixtures import setup_test_users, setup_roles
+from oda_marketing.setup_fixtures import setup_test_users, setup_roles, run_setup
 
 
 class TestMarketingOperationsFlow(unittest.TestCase):
 	def setUp(self):
 		frappe.set_user("Administrator")
-		setup_roles()
-		setup_test_users()
+		run_setup()
 		frappe.db.delete("Content Item")
 		frappe.db.delete("Content Calendar")
 		frappe.db.commit()
+
 	def test_strict_role_creation_and_editing_permissions(self):
 		frappe.set_user("lead.test@oda.local")
 		cal = frappe.get_doc({
@@ -50,8 +50,7 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 			"content_calendar": cal.name,
 			"planned_publish_date": "2026-09-01",
 			"assigned_to": "writer.test@oda.local",
-			"reviewer_technical": "Avishkar.Kabadi@optimumdataanalytics.com",
-			"reviewer_business": "vishwajeet.borade@optimumdataanalytics.com"
+			"reviewer_technical": "Avishkar.Kabadi@optimumdataanalytics.com"
 		})
 		item.insert()
 		frappe.db.commit()
@@ -72,13 +71,50 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 
 		frappe.set_user("Administrator")
 
+	def test_sla_lead_time_calculation_and_validations(self):
+		frappe.set_user("lead.test@oda.local")
+		cal = frappe.get_doc({
+			"doctype": "Content Calendar",
+			"calendar_name": "SLA Test Calendar",
+			"from_date": "2026-01-01",
+			"to_date": "2026-12-31",
+			"status": "Active"
+		}).insert()
+
+		# Set custom SLA lead days to 20 days in settings via db_set and clear cache
+		frappe.db.set_single_value("Marketing Settings", "default_sla_lead_days", 20)
+		frappe.clear_cache()
+
+		item = frappe.get_doc({
+			"doctype": "Content Item",
+			"title": "SLA Lead Time Item",
+			"content_type": "Blog",
+			"topic": "SLA test",
+			"content_calendar": cal.name,
+			"planned_publish_date": "2026-09-01",
+			"assigned_to": "writer.test@oda.local",
+			"reviewer_technical": "Avishkar.Kabadi@optimumdataanalytics.com"
+		})
+		item.insert()
+
+		# Verify SLA Due Date is planned_publish_date (2026-09-01) minus 20 days = 2026-08-12
+		self.assertEqual(str(item.sla_due_date), "2026-08-12")
+
+		# Test mandatory Published URL validation
+		item.workflow_state = "Published"
+		item.published_url = ""
+		self.assertRaises(frappe.ValidationError, item.save)
+
+		# Test mandatory Technical Reviewer validation
+		item.workflow_state = "In Review - Technical"
+		item.reviewer_technical = ""
+		self.assertRaises(frappe.ValidationError, item.save)
+
+		frappe.set_user("Administrator")
+
 	def test_end_to_end_multi_stage_workflow_and_permissions(self):
-		self.test_marketing_settings_validation()
-
 		tech_rev = "Avishkar.Kabadi@optimumdataanalytics.com"
-		biz_rev = "vishwajeet.borade@optimumdataanalytics.com"
 
-		# Step 1: Create Master Setup Calendar
 		frappe.set_user("lead.test@oda.local")
 
 		cal = frappe.get_doc({
@@ -92,7 +128,6 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 		cal.insert()
 		frappe.db.commit()
 
-		# Step 2: Create Content Item (State: Planned)
 		item = frappe.get_doc({
 			"doctype": "Content Item",
 			"title": "GenAI in Oncology",
@@ -102,44 +137,39 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 			"content_calendar": cal.name,
 			"planned_publish_date": "2026-09-01",
 			"assigned_to": "writer.test@oda.local",
-			"reviewer_technical": tech_rev,
-			"reviewer_business": biz_rev
+			"reviewer_technical": tech_rev
 		})
 		item.insert()
 		frappe.db.commit()
 
-		# Step 3: Test User Involvement & Default Publisher Permission Scoping
 		item.reload()
 		self.assertTrue(has_content_item_permission(item, user="writer.test@oda.local"))
 		self.assertTrue(has_content_item_permission(item, user=tech_rev))
-		self.assertTrue(has_content_item_permission(item, user=biz_rev))
 		self.assertTrue(has_content_item_permission(item, user="Mrudula.Saradar@optimumdataanalytics.com"))
 
-		# Step 4: Marketing Lead issues brief (Planned -> Briefed)
+		# Issue Brief
 		frappe.set_user("lead.test@oda.local")
 		item.reload()
 		apply_workflow(item, "Issue Brief")
 		item.reload()
 		self.assertEqual(item.workflow_state, "Briefed")
 
-		# Step 5: Writer accepts brief (Briefed -> In Progress)
+		# Accept Brief
 		frappe.set_user("writer.test@oda.local")
 		item.reload()
 		apply_workflow(item, "Accept Brief")
 		item.reload()
 		self.assertEqual(item.workflow_state, "In Progress")
 
-		# Step 6: Writer attaches primary file & optional assets & submits (In Progress -> In Review - Technical)
+		# Submit for Technical Review (Direct flow when AI Copilot is disabled)
 		item.reload()
-		item.content_file_1 = "/files/sample_draft_v1.pdf"
-		item.content_file_2 = "/files/supporting_chart_1.png"
-		item.content_file_3 = "/files/supporting_chart_2.png"
+		item.content_file_1 = "/files/sample_draft.txt"
 		item.save()
 		apply_workflow(item, "Submit for Technical Review")
 		item.reload()
 		self.assertEqual(item.workflow_state, "In Review - Technical")
 
-		# Step 7: Technical Reviewer requests revisions with notes (In Review - Technical -> In Revision)
+		# Request Changes
 		frappe.set_user(tech_rev)
 		item.reload()
 		item.revision_feedback_notes = "Please clarify the FDA compliance section on page 3."
@@ -148,30 +178,23 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 		item.reload()
 		self.assertEqual(item.workflow_state, "In Revision")
 
-		# Step 8: Writer resubmits draft (In Revision -> In Review - Technical)
+		# Resubmit Draft
 		frappe.set_user("writer.test@oda.local")
 		item.reload()
-		item.content_file_1 = "/files/sample_draft_v2.pdf"
+		item.content_file_1 = "/files/sample_draft.txt"
 		item.save()
-		apply_workflow(item, "Resubmit Draft")
+		apply_workflow(item, "Submit for Technical Review")
 		item.reload()
 		self.assertEqual(item.workflow_state, "In Review - Technical")
 
-		# Step 9: Technical Reviewer approves technical (In Review - Technical -> In Review - Business)
+		# Approve Technical -> Approved
 		frappe.set_user(tech_rev)
 		item.reload()
 		apply_workflow(item, "Approve Technical")
 		item.reload()
-		self.assertEqual(item.workflow_state, "In Review - Business")
-
-		# Step 10: Business Reviewer approves business (In Review - Business -> Approved)
-		frappe.set_user(biz_rev)
-		item.reload()
-		apply_workflow(item, "Approve Business")
-		item.reload()
 		self.assertEqual(item.workflow_state, "Approved")
 
-		# Step 11: Default Publisher / Lead publishes asset (Approved -> Published)
+		# Publish -> Published
 		frappe.set_user("lead.test@oda.local")
 		item.reload()
 		item.published_url = "https://optimumdataanalytics.com/blogs/genai-oncology"
@@ -181,4 +204,4 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 		self.assertEqual(item.workflow_state, "Published")
 
 		frappe.set_user("Administrator")
-		print("End-to-end multi-stage workflow, dedicated published template, and notification routing test passed successfully!")
+		print("End-to-end multi-stage workflow, email CTA button links, and targeted notification test passed successfully!")

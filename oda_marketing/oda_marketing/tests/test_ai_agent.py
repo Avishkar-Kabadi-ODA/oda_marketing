@@ -13,6 +13,19 @@ from oda_marketing.oda_marketing.ai_engine.runner import run_ai_review
 class TestAIAgentEngine(unittest.TestCase):
 	def setUp(self):
 		frappe.db.rollback()
+		cal_name = "2026 Global Marketing Operations Calendar"
+		if not frappe.db.exists("Content Calendar", cal_name):
+			frappe.get_doc({
+				"doctype": "Content Calendar",
+				"calendar_name": cal_name,
+				"from_date": "2026-01-01",
+				"to_date": "2026-12-31",
+				"status": "Active"
+			}).insert(ignore_permissions=True)
+
+		frappe.db.set_single_value("Marketing Settings", "enable_ai_copilot", 1)
+		frappe.db.set_single_value("Marketing Settings", "ai_copilot_passing_score", 80)
+		frappe.clear_cache()
 
 	def test_env_variable_decryption(self):
 		"""Tests creation and retrieval of encrypted Env Variable keys."""
@@ -39,9 +52,10 @@ class TestAIAgentEngine(unittest.TestCase):
 			"content_type": "Blog",
 			"topic": "Evaluating LLM precision in oncology clinical trial matching.",
 			"practice_area": "HCLS",
-			"content_calendar": frappe.db.get_value("Content Calendar", {"status": "Active"}, "name") or "2026 Global Marketing Operations Calendar",
+			"content_calendar": "2026 Global Marketing Operations Calendar",
 			"planned_publish_date": "2026-09-01",
-			"assigned_to": "writer.test@oda.local"
+			"assigned_to": "writer.test@oda.local",
+			"reviewer_technical": "Avishkar.Kabadi@optimumdataanalytics.com"
 		})
 		item.insert(ignore_permissions=True)
 
@@ -51,22 +65,23 @@ class TestAIAgentEngine(unittest.TestCase):
 		self.assertTrue(len(prompt) > 50)
 
 	def test_gatekeeper_validation_prevents_manual_bypass(self):
-		"""Tests that Content Item validation prevents manually skipping to Technical Review when score < 90%."""
+		"""Tests that Content Item validation prevents manually skipping to Technical Review when score < passing score."""
 		item = frappe.get_doc({
 			"doctype": "Content Item",
 			"title": "Incomplete Test Draft",
 			"content_type": "Blog",
 			"topic": "Brief draft topic",
 			"practice_area": "Fintech",
-			"content_calendar": frappe.db.get_value("Content Calendar", {"status": "Active"}, "name") or "2026 Global Marketing Operations Calendar",
+			"content_calendar": "2026 Global Marketing Operations Calendar",
 			"planned_publish_date": "2026-09-01",
 			"assigned_to": "writer.test@oda.local",
-			"ai_score": 75,
+			"reviewer_technical": "Avishkar.Kabadi@optimumdataanalytics.com",
+			"content_file_1": "/files/sample_draft.txt",
+			"ai_score": 50,
 			"ai_review_status": "Completed"
 		})
 		item.insert(ignore_permissions=True)
 
-		# Attempt manual transition to Technical Review with score 75%
 		item.workflow_state = "In Review - Technical"
 		with self.assertRaises(frappe.ValidationError):
 			item.save(ignore_permissions=True)
@@ -79,24 +94,27 @@ class TestAIAgentEngine(unittest.TestCase):
 			"content_type": "Blog",
 			"topic": "Step by step cloud migration guide for enterprise infrastructure.",
 			"practice_area": "Cross-domain",
-			"content_calendar": frappe.db.get_value("Content Calendar", {"status": "Active"}, "name") or "2026 Global Marketing Operations Calendar",
+			"content_calendar": "2026 Global Marketing Operations Calendar",
 			"planned_publish_date": "2026-09-01",
 			"assigned_to": "writer.test@oda.local",
+			"reviewer_technical": "Avishkar.Kabadi@optimumdataanalytics.com",
+			"content_file_1": "/files/sample_draft.txt",
 			"notes": "<p>Detailed cloud architecture document covering multi-cloud failover, Terraform automation, zero-trust network access, and cost governance.</p>"
 		})
 		item.insert(ignore_permissions=True)
 
-		# Run AI review background job synchronously for testing
 		run_ai_review(item.name)
 
-		# Reload item from DB
 		updated_item = frappe.get_doc("Content Item", item.name)
 		self.assertEqual(updated_item.ai_review_status, "Completed")
 		self.assertTrue(updated_item.ai_score >= 0)
 		self.assertTrue(len(updated_item.ai_copilot_feedback) > 10)
 		self.assertTrue(len(updated_item.ai_generated_prompt) > 10)
 
-		if updated_item.ai_score < 90:
+		settings = frappe.get_single("Marketing Settings")
+		passing = int(getattr(settings, "ai_copilot_passing_score", 80) or 80)
+
+		if updated_item.ai_score < passing:
 			self.assertEqual(updated_item.workflow_state, "In Revision")
 		else:
 			self.assertEqual(updated_item.workflow_state, "In Review - Technical")

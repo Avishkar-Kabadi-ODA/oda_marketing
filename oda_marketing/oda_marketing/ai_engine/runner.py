@@ -12,7 +12,7 @@ def run_ai_review(docname):
 	Background job orchestrator (frappe.enqueue):
 	1. Invokes Subagent to generate dynamic system prompt.
 	2. Invokes Primary Evaluator Agent to score the deliverable.
-	3. Updates Content Item fields and executes 90% gatekeeper status transition.
+	3. Updates Content Item fields and executes gatekeeper status transition.
 	"""
 	if not frappe.db.exists("Content Item", docname):
 		return
@@ -49,28 +49,31 @@ def run_ai_review(docname):
 		doc.ai_generated_prompt = dynamic_prompt
 		doc.ai_copilot_feedback = feedback
 
+		# Record entry in AI Review History Table
+		verdict_label = "Passed" if score >= passing_score else "Revision Required"
+		doc.append("ai_reviews", {
+			"review_datetime": frappe.utils.now_datetime(),
+			"score": score,
+			"status": verdict_label,
+			"feedback": feedback,
+			"system_prompt": dynamic_prompt
+		})
+
 		# Stage 3: Gatekeeper Decision Branching (Configurable Threshold)
-		if score < passing_score:
-			publish_stream_event(
-				docname, assigned_user,
-				f"AI Score ({score}%) below passing threshold ({passing_score}%). Reverting to 'In Revision'.",
-				progress=100
-			)
+		target_state = "In Revision" if score < passing_score else "In Review - Technical"
 
-			doc.workflow_state = "In Revision"
-			doc.status = "In Revision"
-			doc.save(ignore_permissions=True)
+		publish_stream_event(
+			docname, assigned_user,
+			f"AI Score ({score}%) threshold check ({passing_score}%). Moving to '{target_state}'.",
+			progress=100
+		)
 
-		else:
-			publish_stream_event(
-				docname, assigned_user,
-				f"AI Score ({score}%) passed threshold ({passing_score}%)! Advancing to Technical Review.",
-				progress=100
-			)
-
-			doc.workflow_state = "In Review - Technical"
-			doc.status = "In Review - Technical"
-			doc.save(ignore_permissions=True)
+		doc.db_set("workflow_state", target_state, update_modified=False)
+		doc.db_set("status", target_state, update_modified=False)
+		doc.workflow_state = target_state
+		doc.status = target_state
+		doc.flags.ignore_workflow = True
+		doc.save(ignore_permissions=True)
 
 		frappe.db.commit()
 
@@ -83,7 +86,7 @@ def run_ai_review(docname):
 
 
 def notify_writer_copilot_failed(doc, score, feedback):
-	"""Sends an automated alert to Content Writer when AI Copilot score is below 90%."""
+	"""Sends an automated alert to Content Writer when AI Copilot score is below threshold."""
 	if not doc.assigned_to:
 		return
 
@@ -91,7 +94,7 @@ def notify_writer_copilot_failed(doc, score, feedback):
 		subject = f"[COPILOT REVISION REQUIRED] Deliverable '{doc.title}' AI Quality Score: {score}%"
 		message = f"""<p>Hello <b>{doc.get_user_full_name(doc.assigned_to)}</b>,</p>
 <p>Your content deliverable <b>{doc.title}</b> has been evaluated by the <b>Marketing Copilot Agent</b>.</p>
-<p><b>AI Quality Score:</b> <span style="color: #dc2626; font-weight: bold;">{score}%</span> (Minimum Required: <b>90%</b>)</p>
+<p><b>AI Quality Score:</b> <span style="color: #dc2626; font-weight: bold;">{score}%</span></p>
 <p>The deliverable has been moved to <b>In Revision</b> status. Please review the AI Copilot Feedback below, update your content draft, and resubmit.</p>
 <div style="background-color: #f8fafc; border-left: 4px solid #3b82f6; padding: 15px; margin: 15px 0;">
   {feedback}

@@ -16,7 +16,6 @@
   "planned_publish_date",
   "assigned_to",
   "reviewer_technical",
-  "reviewer_business",
   "content_section",
   "content_file_1",
   "content_file_2",
@@ -27,6 +26,7 @@
   "ai_review_status",
   "ai_copilot_feedback",
   "ai_generated_prompt",
+  "ai_reviews",
   "column_break_2",
   "sla_due_date",
   "risk_flag",
@@ -59,7 +59,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Status",
-   "options": "Planned\nBriefed\nIn Progress\nMarketing Copilot Review\nIn Review - Technical\nIn Review - Business\nIn Revision\nApproved\nPublished",
+   "options": "Planned\nBriefed\nIn Progress\nMarketing Copilot Review\nIn Review - Technical\nIn Revision\nApproved\nPublished",
    "read_only": 1
   },
   {
@@ -121,13 +121,6 @@
    "options": "User"
   },
   {
-   "fieldname": "reviewer_business",
-   "fieldtype": "Link",
-   "in_standard_filter": 1,
-   "label": "Business Reviewer",
-   "options": "User"
-  },
-  {
    "fieldname": "content_section",
    "fieldtype": "Section Break",
    "label": "Writer's Content Drafts & Attachments"
@@ -157,7 +150,7 @@
    "fieldtype": "Date",
    "in_list_view": 1,
    "label": "SLA Due Date",
-   "read_only": 1
+   "read_only": 0
   },
   {
    "default": "On track",
@@ -228,17 +221,24 @@
    "read_only": 1
   },
   {
-   "depends_on": "eval:frappe.user.has_role('Marketing Lead') || frappe.user.has_role('System Manager') || frappe.session.user === 'Administrator'",
+   "depends_on": "eval:false",
    "fieldname": "ai_generated_prompt",
    "fieldtype": "Code",
-   "label": "System Prompt (Subagent Generated - Lead Only)",
+   "hidden": 1,
+   "label": "System Prompt (Subagent Generated - Settings Only)",
    "read_only": 1
+  },
+  {
+   "fieldname": "ai_reviews",
+   "fieldtype": "Table",
+   "label": "AI Copilot Review Audit History",
+   "options": "Content Item AI Review"
   }
  ],
- "icon": "list-checks",
+ "icon": "tickets",
  "idx": 0,
  "links": [],
- "modified": "2026-08-03 11:48:00",
+ "modified": "2026-08-04 20:20:00",
  "modified_by": "Administrator",
  "module": "ODA Marketing",
  "name": "Content Item",
@@ -292,18 +292,6 @@
    "role": "Technical Reviewer",
    "share": 1,
    "write": 1
-  },
-  {
-   "create": 0,
-   "delete": 0,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Business Reviewer",
-   "share": 1,
-   "write": 1
   }
  ],
  "search_fields": "title, content_type, topic, status",
@@ -325,10 +313,6 @@
   {
    "color": "Yellow",
    "title": "In Review - Technical"
-  },
-  {
-   "color": "Purple",
-   "title": "In Review - Business"
   },
   {
    "color": "Red",

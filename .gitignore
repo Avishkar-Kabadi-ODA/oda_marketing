@@ -36,7 +36,7 @@ venv.bak/
 node_modules/
 jspm_packages/
 
-# IDEs and editors
+# IDEs, editors and agent scratch files
 .vscode/
 .vs/
 .idea/
@@ -47,6 +47,11 @@ jspm_packages/
 *.comp.js
 .wnf-lang-status
 *debug.log
+.gemini/
+scratch/
+*.tmp
+*.log
+public/files/sample_draft.*
 
 # Helix Editor
 .helix/

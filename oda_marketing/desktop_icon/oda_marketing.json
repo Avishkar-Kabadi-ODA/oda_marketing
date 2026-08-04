@@ -1,0 +1,21 @@
+{
+ "app": "oda_marketing",
+ "bg_color": "gray",
+ "creation": "2026-08-04 21:02:17.703662",
+ "docstatus": 0,
+ "doctype": "Desktop Icon",
+ "hidden": 0,
+ "icon_type": "App",
+ "idx": 0,
+ "label": "ODA Marketing",
+ "link": "/app/oda-marketing",
+ "link_type": "Workspace Sidebar",
+ "logo_url": "/assets/oda_marketing/images/oda_logo.svg",
+ "modified": "2026-08-04 21:17:15.671376",
+ "modified_by": "Administrator",
+ "name": "ODA Marketing",
+ "owner": "Administrator",
+ "restrict_removal": 0,
+ "roles": [],
+ "standard": 1
+}

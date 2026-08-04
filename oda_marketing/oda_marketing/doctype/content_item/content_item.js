@@ -11,20 +11,31 @@ frappe.ui.form.on("Content Item", {
 			}, __("Actions"));
 		}
 
-		if (frm.doc.workflow_state === "Marketing Copilot Review" || frm.doc.ai_review_status === "Queued") {
-			frm.add_custom_button(__("Run AI Copilot Review Now"), function() {
-				frappe.show_progress(__("Marketing Copilot Review"), 15, 100, __("Starting AI Copilot Review..."));
-				frappe.call({
-					method: "oda_marketing.oda_marketing.doctype.content_item.content_item.trigger_ai_copilot",
-					args: { docname: frm.doc.name },
-					callback: function(r) {
-						frappe.hide_progress();
-						frappe.show_alert({ message: __("AI Copilot Review completed!"), indicator: "green" });
-						frm.reload_doc();
-					}
-				});
-			}, __("Actions"));
-		}
+		frappe.db.get_single_value("Marketing Settings", "enable_ai_copilot").then(enable_ai => {
+			if (enable_ai) {
+				if (frm.doc.workflow_state === "Marketing Copilot Review" || frm.doc.ai_review_status === "Queued") {
+					frm.add_custom_button(__("Run AI Copilot Review Now"), function() {
+						frappe.show_progress(__("Marketing Copilot Review"), 15, 100, __("Starting AI Copilot Review..."));
+						frappe.call({
+							method: "oda_marketing.oda_marketing.doctype.content_item.content_item.trigger_ai_copilot",
+							args: { docname: frm.doc.name },
+							callback: function(r) {
+								frappe.hide_progress();
+								frappe.show_alert({ message: __("AI Copilot Review completed!"), indicator: "green" });
+								frm.reload_doc();
+							}
+						});
+					}, __("Actions"));
+				}
+			} else {
+				// Hide AI section and evaluation fields when AI Copilot is disabled
+				frm.set_df_property("ai_section", "hidden", 1);
+				frm.set_df_property("ai_score", "hidden", 1);
+				frm.set_df_property("ai_review_status", "hidden", 1);
+				frm.set_df_property("ai_copilot_feedback", "hidden", 1);
+				frm.set_df_property("ai_reviews", "hidden", 1);
+			}
+		});
 
 		// Listen for realtime streaming socket events from AI Agent
 		if (!frm.ai_socket_listener) {
@@ -46,28 +57,29 @@ frappe.ui.form.on("Content Item", {
 	apply_role_field_permissions(frm) {
 		const is_lead = frappe.user.has_role("Marketing Lead") || frappe.user.has_role("System Manager") || frappe.session.user === "Administrator";
 		const is_writer = frappe.user.has_role("Content Writer") || is_lead;
-		const is_reviewer = frappe.user.has_role("Technical Reviewer") || frappe.user.has_role("Business Reviewer");
+		const is_reviewer = frappe.user.has_role("Technical Reviewer");
 
 		if (!is_lead) {
-			// Lock core metadata fields for non-leads
 			const metadata_fields = [
 				"title", "content_type", "topic", "practice_area",
 				"content_calendar", "planned_publish_date", "assigned_to",
-				"reviewer_technical", "reviewer_business", "published_url",
+				"reviewer_technical", "published_url",
 				"sharepoint_folder_url", "risk_flag"
 			];
 			metadata_fields.forEach(field => frm.set_df_property(field, "read_only", 1));
+
+			setTimeout(() => {
+				$("a:contains('Edit Sidebar'), .sidebar-item-container:contains('Edit Sidebar')").hide();
+			}, 300);
 		}
 
 		if (is_writer) {
-			// Writer & Lead can upload/edit all 3 draft attachments & working notes
 			frm.set_df_property("content_file_1", "read_only", 0);
 			frm.set_df_property("content_file_2", "read_only", 0);
 			frm.set_df_property("content_file_3", "read_only", 0);
 			frm.set_df_property("notes", "read_only", 0);
 			frm.set_df_property("revision_feedback_notes", "read_only", 1);
 		} else if (is_reviewer) {
-			// Reviewers can view & download writer files, but CANNOT modify/replace them
 			frm.set_df_property("content_file_1", "read_only", 1);
 			frm.set_df_property("content_file_2", "read_only", 1);
 			frm.set_df_property("content_file_3", "read_only", 1);
@@ -75,11 +87,15 @@ frappe.ui.form.on("Content Item", {
 			frm.set_df_property("revision_feedback_notes", "read_only", 0);
 		}
 
-		// Field Visibility Rules:
-		// 1. Dynamic System Prompt (Subagent): ONLY visible to Marketing Lead or Admin
-		frm.set_df_property("ai_generated_prompt", "hidden", is_lead ? 0 : 1);
+		// Require revision feedback notes if state is In Revision
+		if (frm.doc.workflow_state === "In Revision") {
+			frm.set_df_property("revision_feedback_notes", "reqd", 1);
+		}
 
-		// 2. AI Copilot Feedback & Improvements: ONLY visible to assigned Content Writer / Owner (and Marketing Lead/Admin)
+		// Hidden for all users on form view (viewable in Marketing Settings)
+		frm.set_df_property("ai_generated_prompt", "hidden", 1);
+
+		// AI Copilot Feedback & Improvements: visible to assigned writer or owner (and Marketing Lead/Admin)
 		const is_assigned_writer = (frappe.session.user === frm.doc.assigned_to) || (frappe.session.user === frm.doc.owner);
 		const can_see_ai_feedback = frm.doc.ai_copilot_feedback && (is_assigned_writer || is_lead);
 		frm.set_df_property("ai_copilot_feedback", "hidden", can_see_ai_feedback ? 0 : 1);

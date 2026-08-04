@@ -10,7 +10,6 @@ def setup_roles():
 		{"role_name": "Marketing Lead", "desk_access": 1},
 		{"role_name": "Content Writer", "desk_access": 1},
 		{"role_name": "Technical Reviewer", "desk_access": 1},
-		{"role_name": "Business Reviewer", "desk_access": 1},
 	]
 	for r in roles:
 		if not frappe.db.exists("Role", r["role_name"]):
@@ -28,7 +27,6 @@ def setup_test_users():
 		{"email": "lead.test@oda.local", "first_name": "Marketing", "last_name": "Lead Test", "role": "Marketing Lead"},
 		{"email": "writer.test@oda.local", "first_name": "Content", "last_name": "Writer Test", "role": "Content Writer"},
 		{"email": "Avishkar.Kabadi@optimumdataanalytics.com", "first_name": "Avishkar", "last_name": "Kabadi", "role": "Technical Reviewer"},
-		{"email": "vishwajeet.borade@optimumdataanalytics.com", "first_name": "Vishwajeet", "last_name": "Borade", "role": "Business Reviewer"},
 		{"email": "Mrudula.Saradar@optimumdataanalytics.com", "first_name": "Mrudula", "last_name": "Saradar", "role": "Marketing Lead"},
 	]
 	for u in test_users:
@@ -74,18 +72,20 @@ def setup_email_templates_and_settings():
   <p>Please update your draft attachments and click <b>'Resubmit Draft'</b>.</p>
 {% else %}
   <p>Your marketing deliverable <b>{{ doc.title }}</b> status is now: <b>{{ doc.workflow_state }}</b>.</p>
-{% endif %}"""
+{% endif %}
+<div style='margin-top: 15px;'>
+  <a href="{{ content_item_url }}" target="_blank" style="display: inline-block; background-color: #4F46E5; color: #ffffff; padding: 10px 18px; text-decoration: none; border-radius: 6px; font-weight: 600;">View Content Item in Desk</a>
+</div>"""
 		},
 		{
 			"name": "Marketing Reviewer Notification",
 			"subject": "[REVIEW NOTIFICATION] {{ doc.workflow_state }} for '{{ doc.title }}'",
-			"response": """<p>Hello <b>{% if doc.workflow_state == "In Review - Technical" %}{{ reviewer_technical_name }}{% else %}{{ reviewer_business_name }}{% endif %}</b>,</p>
+			"response": """<p>Hello <b>{{ reviewer_technical_name }}</b>,</p>
 <p>Content deliverable <b>{{ doc.title }}</b> (Type: {{ doc.content_type }}) requires your signoff for status: <b>{{ doc.workflow_state }}</b>.</p>
 <ul>
   <li><b>Assigned Writer:</b> {{ assigned_to_name }}</li>
   <li><b>Created By:</b> {{ creator_name }}</li>
   <li><b>Technical Reviewer:</b> {{ reviewer_technical_name }}</li>
-  <li><b>Business Reviewer:</b> {{ reviewer_business_name }}</li>
   <li><b>SLA Due Date:</b> {{ doc.sla_due_date }}</li>
   {% if content_file_1_link %}
     <li><b>Primary Content Draft:</b> {{ content_file_1_link }}</li>
@@ -97,13 +97,15 @@ def setup_email_templates_and_settings():
     <li><b>Supporting Asset 2:</b> {{ content_file_3_link }}</li>
   {% endif %}
 </ul>
-<p>Please log into the portal to review and take action.</p>"""
+<div style='margin-top: 15px;'>
+  <a href="{{ content_item_url }}" target="_blank" style="display: inline-block; background-color: #4F46E5; color: #ffffff; padding: 10px 18px; text-decoration: none; border-radius: 6px; font-weight: 600;">View Content Item in Desk</a>
+</div>"""
 		},
 		{
 			"name": "Marketing Publisher Notification",
 			"subject": "[PUBLISHING NOTIFICATION] Deliverable '{{ doc.title }}' Status: Approved for Publishing",
 			"response": """<p>Hello <b>{{ publisher_name }}</b>,</p>
-<p>Great news! The deliverable <b>{{ doc.title }}</b> has passed all technical review by <b>{{ reviewer_technical_name }}</b> and business review by <b>{{ reviewer_business_name }}</b> and is marked <b>Approved</b> for final publishing.</p>
+<p>Great news! The deliverable <b>{{ doc.title }}</b> has passed technical review by <b>{{ reviewer_technical_name }}</b> and is marked <b>Approved</b> for final publishing.</p>
 <ul>
   <li><b>Assigned Writer:</b> {{ assigned_to_name }}</li>
   <li><b>Created By:</b> {{ creator_name }}</li>
@@ -117,7 +119,9 @@ def setup_email_templates_and_settings():
     <li><b>Supporting Asset 2:</b> {{ content_file_3_link }}</li>
   {% endif %}
 </ul>
-<p>Please log into the portal to publish this asset.</p>"""
+<div style='margin-top: 15px;'>
+  <a href="{{ content_item_url }}" target="_blank" style="display: inline-block; background-color: #059669; color: #ffffff; padding: 10px 18px; text-decoration: none; border-radius: 6px; font-weight: 600;">View Content Item in Desk</a>
+</div>"""
 		},
 		{
 			"name": "Marketing Published Notification",
@@ -137,7 +141,9 @@ def setup_email_templates_and_settings():
 {% if content_file_1_link %}
   <p><b>Primary Content Draft:</b> {{ content_file_1_link }}</p>
 {% endif %}
-<p>Please expedite processing immediately.</p>"""
+<div style='margin-top: 15px;'>
+  <a href="{{ content_item_url }}" target="_blank" style="display: inline-block; background-color: #DC2626; color: #ffffff; padding: 10px 18px; text-decoration: none; border-radius: 6px; font-weight: 600;">View Content Item in Desk</a>
+</div>"""
 		}
 	]
 
@@ -158,18 +164,19 @@ def setup_email_templates_and_settings():
 			et.insert(ignore_permissions=True)
 			print(f"Created/Updated Email Template: {t['name']}")
 
-	# Pre-populate Marketing Settings Single DocType with designated users & templates
+	# Production Defaults: Master switches set to 0 (Disabled by default)
 	settings = frappe.get_single("Marketing Settings")
-	settings.enable_email_notifications = 1
-	settings.enable_auto_overdue_flag = 1
-	settings.default_publisher = "Mrudula.Saradar@optimumdataanalytics.com"
+	settings.enable_email_notifications = 0
+	settings.enable_auto_overdue_flag = 0
+	settings.enable_ai_copilot = 0
+	settings.default_sla_lead_days = 14
+	settings.ai_copilot_passing_score = 80
+	settings.ai_provider = "APIM Gateway"
 	settings.writer_email_template = "Marketing Writer Notification"
 	settings.reviewer_email_template = "Marketing Reviewer Notification"
 	settings.publisher_email_template = "Marketing Publisher Notification"
 	settings.published_email_template = "Marketing Published Notification"
 	settings.overdue_sla_email_template = "Marketing Overdue SLA Alert"
-	settings.enable_ai_copilot = 1
-	settings.ai_copilot_passing_score = 80
 
 	settings.subagent_meta_prompt = """You are a constructive AI Copilot & Enterprise Marketing Auditor for Optimum Data Analytics (ODA).
 Your task is to analyze deliverable metadata and create a practical, fair System Prompt for evaluating the document.
@@ -199,13 +206,13 @@ EVALUATION GUIDELINES FOR THIS DELIVERABLE:
 3. Passing threshold is 80%."""
 
 	settings.save(ignore_permissions=True)
-	print("Pre-populated Marketing Settings with default publisher Mrudula.Saradar@optimumdataanalytics.com, email templates & AI Copilot prompts.")
+	print("Initialized Marketing Settings with production defaults (Switches: 0, SLA Lead Days: 14).")
 
 
 def setup_workflow_states_and_actions():
 	state_names = [
 		"Planned", "Briefed", "In Progress", "Marketing Copilot Review",
-		"In Review - Technical", "In Review - Business", "In Revision", "Approved", "Published"
+		"In Review - Technical", "In Revision", "Approved", "Published"
 	]
 	for state in state_names:
 		if not frappe.db.exists("Workflow State", state):
@@ -218,8 +225,8 @@ def setup_workflow_states_and_actions():
 
 	action_names = [
 		"Issue Brief", "Accept Brief", "Submit for Copilot Review",
-		"Approve AI Copilot", "Request Changes", "Approve Technical",
-		"Approve Business", "Resubmit Draft", "Publish"
+		"Submit for Technical Review", "Approve AI Copilot", "Request Changes",
+		"Approve Technical", "Resubmit Draft", "Publish"
 	]
 	for action in action_names:
 		if not frappe.db.exists("Workflow Action Master", action):
@@ -244,7 +251,6 @@ def setup_workflow():
 		{"state": "In Progress", "doc_status": "0", "allow_edit": "Content Writer", "style": "Warning"},
 		{"state": "Marketing Copilot Review", "doc_status": "0", "allow_edit": "Content Writer", "style": "Info"},
 		{"state": "In Review - Technical", "doc_status": "0", "allow_edit": "Technical Reviewer", "style": "Warning"},
-		{"state": "In Review - Business", "doc_status": "0", "allow_edit": "Business Reviewer", "style": "Warning"},
 		{"state": "In Revision", "doc_status": "0", "allow_edit": "Content Writer", "style": "Danger"},
 		{"state": "Approved", "doc_status": "0", "allow_edit": "Marketing Lead", "style": "Success"},
 		{"state": "Published", "doc_status": "0", "allow_edit": "Marketing Lead", "style": "Success"},
@@ -258,6 +264,7 @@ def setup_workflow():
 		{"state": "Briefed", "action": "Accept Brief", "next_state": "In Progress", "allowed": "Marketing Lead"},
 		{"state": "Briefed", "action": "Accept Brief", "next_state": "In Progress", "allowed": "System Manager"},
 
+		# AI Copilot workflow branch
 		{"state": "Briefed", "action": "Submit for Copilot Review", "next_state": "Marketing Copilot Review", "allowed": "Content Writer"},
 		{"state": "Briefed", "action": "Submit for Copilot Review", "next_state": "Marketing Copilot Review", "allowed": "Marketing Lead"},
 		{"state": "Briefed", "action": "Submit for Copilot Review", "next_state": "Marketing Copilot Review", "allowed": "System Manager"},
@@ -266,9 +273,22 @@ def setup_workflow():
 		{"state": "In Progress", "action": "Submit for Copilot Review", "next_state": "Marketing Copilot Review", "allowed": "Marketing Lead"},
 		{"state": "In Progress", "action": "Submit for Copilot Review", "next_state": "Marketing Copilot Review", "allowed": "System Manager"},
 
+		# Direct Technical Review workflow branch (Used when AI Copilot is disabled)
+		{"state": "Briefed", "action": "Submit for Technical Review", "next_state": "In Review - Technical", "allowed": "Content Writer"},
+		{"state": "Briefed", "action": "Submit for Technical Review", "next_state": "In Review - Technical", "allowed": "Marketing Lead"},
+		{"state": "Briefed", "action": "Submit for Technical Review", "next_state": "In Review - Technical", "allowed": "System Manager"},
+
+		{"state": "In Progress", "action": "Submit for Technical Review", "next_state": "In Review - Technical", "allowed": "Content Writer"},
+		{"state": "In Progress", "action": "Submit for Technical Review", "next_state": "In Review - Technical", "allowed": "Marketing Lead"},
+		{"state": "In Progress", "action": "Submit for Technical Review", "next_state": "In Review - Technical", "allowed": "System Manager"},
+
 		{"state": "In Revision", "action": "Resubmit Draft", "next_state": "Marketing Copilot Review", "allowed": "Content Writer"},
 		{"state": "In Revision", "action": "Resubmit Draft", "next_state": "Marketing Copilot Review", "allowed": "Marketing Lead"},
 		{"state": "In Revision", "action": "Resubmit Draft", "next_state": "Marketing Copilot Review", "allowed": "System Manager"},
+
+		{"state": "In Revision", "action": "Submit for Technical Review", "next_state": "In Review - Technical", "allowed": "Content Writer"},
+		{"state": "In Revision", "action": "Submit for Technical Review", "next_state": "In Review - Technical", "allowed": "Marketing Lead"},
+		{"state": "In Revision", "action": "Submit for Technical Review", "next_state": "In Review - Technical", "allowed": "System Manager"},
 
 		{"state": "Marketing Copilot Review", "action": "Approve AI Copilot", "next_state": "In Review - Technical", "allowed": "Content Writer"},
 		{"state": "Marketing Copilot Review", "action": "Approve AI Copilot", "next_state": "In Review - Technical", "allowed": "Marketing Lead"},
@@ -282,17 +302,9 @@ def setup_workflow():
 		{"state": "In Review - Technical", "action": "Request Changes", "next_state": "In Revision", "allowed": "Marketing Lead"},
 		{"state": "In Review - Technical", "action": "Request Changes", "next_state": "In Revision", "allowed": "System Manager"},
 
-		{"state": "In Review - Technical", "action": "Approve Technical", "next_state": "In Review - Business", "allowed": "Technical Reviewer"},
-		{"state": "In Review - Technical", "action": "Approve Technical", "next_state": "In Review - Business", "allowed": "Marketing Lead"},
-		{"state": "In Review - Technical", "action": "Approve Technical", "next_state": "In Review - Business", "allowed": "System Manager"},
-
-		{"state": "In Review - Business", "action": "Request Changes", "next_state": "In Revision", "allowed": "Business Reviewer"},
-		{"state": "In Review - Business", "action": "Request Changes", "next_state": "In Revision", "allowed": "Marketing Lead"},
-		{"state": "In Review - Business", "action": "Request Changes", "next_state": "In Revision", "allowed": "System Manager"},
-
-		{"state": "In Review - Business", "action": "Approve Business", "next_state": "Approved", "allowed": "Business Reviewer"},
-		{"state": "In Review - Business", "action": "Approve Business", "next_state": "Approved", "allowed": "Marketing Lead"},
-		{"state": "In Review - Business", "action": "Approve Business", "next_state": "Approved", "allowed": "System Manager"},
+		{"state": "In Review - Technical", "action": "Approve Technical", "next_state": "Approved", "allowed": "Technical Reviewer"},
+		{"state": "In Review - Technical", "action": "Approve Technical", "next_state": "Approved", "allowed": "Marketing Lead"},
+		{"state": "In Review - Technical", "action": "Approve Technical", "next_state": "Approved", "allowed": "System Manager"},
 
 		{"state": "Approved", "action": "Publish", "next_state": "Published", "allowed": "Marketing Lead"},
 		{"state": "Approved", "action": "Publish", "next_state": "Published", "allowed": "System Manager"},
@@ -321,8 +333,8 @@ def setup_kanban_board():
 		{"column_name": "Planned", "status": "Active", "indicator": "Gray"},
 		{"column_name": "Briefed", "status": "Active", "indicator": "Light Blue"},
 		{"column_name": "In Progress", "status": "Active", "indicator": "Orange"},
+		{"column_name": "Marketing Copilot Review", "status": "Active", "indicator": "Purple"},
 		{"column_name": "In Review - Technical", "status": "Active", "indicator": "Yellow"},
-		{"column_name": "In Review - Business", "status": "Active", "indicator": "Purple"},
 		{"column_name": "In Revision", "status": "Active", "indicator": "Red"},
 		{"column_name": "Approved", "status": "Active", "indicator": "Cyan"},
 		{"column_name": "Published", "status": "Active", "indicator": "Green"},
@@ -340,27 +352,22 @@ def setup_kanban_board():
 	print(f"Created Kanban Board: {board_name}")
 
 
-def clear_and_seed_data():
-	print("Clearing old dummy records...")
-	frappe.db.delete("Content Item")
-	frappe.db.delete("Content Calendar")
-	frappe.db.commit()
-
+def seed_demo_data():
+	"""Developer/Testing helper: Seeds realistic Content Calendar & Content Items."""
+	print("Seeding demo data...")
 	cal_name = "2026 Global Marketing Operations Calendar"
-	cal = frappe.get_doc({
-		"doctype": "Content Calendar",
-		"calendar_name": cal_name,
-		"from_date": "2026-01-01",
-		"to_date": "2026-12-31",
-		"status": "Active",
-		"description": "Annual 2026 content calendar for Optimum Data Analytics covering HCLS, Pharma, Fintech, and AgTech verticals."
-	})
-	cal.insert(ignore_permissions=True)
-	print(f"Created Master Setup Calendar: {cal_name}")
+	if not frappe.db.exists("Content Calendar", cal_name):
+		cal = frappe.get_doc({
+			"doctype": "Content Calendar",
+			"calendar_name": cal_name,
+			"from_date": "2026-01-01",
+			"to_date": "2026-12-31",
+			"status": "Active",
+			"description": "Annual 2026 content calendar for Optimum Data Analytics covering HCLS, Pharma, Fintech, and AgTech verticals."
+		})
+		cal.insert(ignore_permissions=True)
 
-	# Realistic marketing content items assigned to real testing emails
 	tech_rev = "Avishkar.Kabadi@optimumdataanalytics.com"
-	biz_rev = "vishwajeet.borade@optimumdataanalytics.com"
 
 	sample_items = [
 		{
@@ -371,8 +378,7 @@ def clear_and_seed_data():
 			"planned_publish_date": "2026-08-15",
 			"assigned_to": "writer.test@oda.local",
 			"reviewer_technical": tech_rev,
-			"reviewer_business": biz_rev,
-			"content_file_1": "/files/genai_clinical_draft.pdf",
+			"content_file_1": "/files/sample_draft.txt",
 			"target_state": "Published",
 			"published_url": "https://optimumdataanalytics.com/insights/ai-clinical-decision-support"
 		},
@@ -384,80 +390,32 @@ def clear_and_seed_data():
 			"planned_publish_date": "2026-08-22",
 			"assigned_to": "writer.test@oda.local",
 			"reviewer_technical": tech_rev,
-			"reviewer_business": biz_rev,
-			"content_file_1": "/files/pharma_cold_chain.pdf",
+			"content_file_1": "/files/sample_draft.txt",
 			"target_state": "In Review - Technical"
-		},
-		{
-			"title": "Automated Commercial Loan Underwriting Workflow",
-			"content_type": "Flowchart",
-			"topic": "Step-by-step visual blueprint of AI document parsing in SME credit evaluation.",
-			"practice_area": "Fintech",
-			"planned_publish_date": "2026-08-28",
-			"assigned_to": "writer.test@oda.local",
-			"reviewer_technical": tech_rev,
-			"reviewer_business": biz_rev,
-			"content_file_1": "/files/loan_flowchart.png",
-			"target_state": "In Progress"
-		},
-		{
-			"title": "Precision Agriculture: Crop Yield Prediction Architecture",
-			"content_type": "Carousel",
-			"topic": "5 key satellite imaging techniques for early drought detection.",
-			"practice_area": "Agriculture",
-			"planned_publish_date": "2026-09-05",
-			"assigned_to": "writer.test@oda.local",
-			"reviewer_technical": tech_rev,
-			"reviewer_business": biz_rev,
-			"target_state": "Briefed"
-		},
-		{
-			"title": "Industry Poll: Key Bottlenecks in Drug Approval Timelines",
-			"content_type": "Poll",
-			"topic": "Interactive LinkedIn poll assessing regulatory submission challenges in 2026.",
-			"practice_area": "Pharma Supply Chain",
-			"planned_publish_date": "2026-09-10",
-			"assigned_to": "writer.test@oda.local",
-			"reviewer_technical": tech_rev,
-			"reviewer_business": biz_rev,
-			"target_state": "Planned"
-		},
-		{
-			"title": "Cross-Domain Agentic Workflows for Enterprise Analytics",
-			"content_type": "Blog",
-			"topic": "Architectural breakdown of multi-agent orchestration engines.",
-			"practice_area": "Cross-domain",
-			"planned_publish_date": "2026-09-18",
-			"assigned_to": "writer.test@oda.local",
-			"reviewer_technical": tech_rev,
-			"reviewer_business": biz_rev,
-			"target_state": "Planned"
 		}
 	]
 
 	for data in sample_items:
-		item = frappe.get_doc({
-			"doctype": "Content Item",
-			"title": data["title"],
-			"content_type": data["content_type"],
-			"topic": data["topic"],
-			"practice_area": data["practice_area"],
-			"content_calendar": cal_name,
-			"planned_publish_date": data["planned_publish_date"],
-			"assigned_to": data["assigned_to"],
-			"reviewer_technical": data["reviewer_technical"],
-			"reviewer_business": data["reviewer_business"],
-			"content_file_1": data.get("content_file_1", ""),
-			"published_url": data.get("published_url", ""),
-			"owner": data["assigned_to"]
-		})
-		item.insert(ignore_permissions=True)
-
-		if data["target_state"] != "Planned":
-			item.db_set("workflow_state", data["target_state"])
+		if not frappe.db.exists("Content Item", {"title": data["title"]}):
+			item = frappe.get_doc({
+				"doctype": "Content Item",
+				"title": data["title"],
+				"content_type": data["content_type"],
+				"topic": data["topic"],
+				"practice_area": data["practice_area"],
+				"content_calendar": cal_name,
+				"planned_publish_date": data["planned_publish_date"],
+				"assigned_to": data["assigned_to"],
+				"reviewer_technical": data["reviewer_technical"],
+				"content_file_1": data.get("content_file_1", ""),
+				"published_url": data.get("published_url", ""),
+				"owner": data["assigned_to"]
+			})
+			item.insert(ignore_permissions=True)
+			if data["target_state"] != "Planned":
+				item.db_set("workflow_state", data["target_state"])
 
 	frappe.db.commit()
-	print(f"Seeded {len(sample_items)} realistic Content Items.")
 
 
 def setup_workspace_sidebar():
@@ -521,15 +479,68 @@ def setup_workspace_sidebar():
 		"items": items,
 	})
 	sidebar.insert(ignore_permissions=True)
-	print(f"Created Workspace Sidebar: {sidebar_name}")
+
+	frappe.db.delete("Custom DocPerm", {"parent": "Workspace Sidebar"})
+
+	frappe.get_doc({
+		"doctype": "Custom DocPerm",
+		"parent": "Workspace Sidebar",
+		"parenttype": "DocType",
+		"parentfield": "permissions",
+		"role": "System Manager",
+		"read": 1, "write": 1, "create": 1, "delete": 1
+	}).insert(ignore_permissions=True)
+
+	frappe.get_doc({
+		"doctype": "Custom DocPerm",
+		"parent": "Workspace Sidebar",
+		"parenttype": "DocType",
+		"parentfield": "permissions",
+		"role": "Marketing Lead",
+		"read": 1, "write": 1, "create": 1, "delete": 1
+	}).insert(ignore_permissions=True)
+
+	frappe.get_doc({
+		"doctype": "Custom DocPerm",
+		"parent": "Workspace Sidebar",
+		"parenttype": "DocType",
+		"parentfield": "permissions",
+		"role": "Desk User",
+		"read": 0, "write": 0, "create": 0, "delete": 0
+	}).insert(ignore_permissions=True)
+
+	frappe.clear_cache(doctype="Workspace Sidebar")
+	frappe.clear_cache(doctype="Workspace")
+
+
+def setup_desktop_icon():
+	if frappe.db.exists("Desktop Icon", "ODA Marketing Copilot"):
+		frappe.delete_doc("Desktop Icon", "ODA Marketing Copilot", force=True, ignore_permissions=True)
+
+	if frappe.db.exists("Desktop Icon", "ODA Marketing"):
+		icon_doc = frappe.get_doc("Desktop Icon", "ODA Marketing")
+		icon_doc.label = "ODA Marketing"
+		icon_doc.logo_url = "/assets/oda_marketing/images/oda_logo.svg"
+		icon_doc.save(ignore_permissions=True)
+	else:
+		icon_doc = frappe.get_doc({
+			"doctype": "Desktop Icon",
+			"name": "ODA Marketing",
+			"label": "ODA Marketing",
+			"app": "oda_marketing",
+			"logo_url": "/assets/oda_marketing/images/oda_logo.svg",
+			"standard": 1,
+			"icon_type": "App",
+			"link": "/app/oda-marketing"
+		})
+		icon_doc.insert(ignore_permissions=True)
 
 
 def run_setup():
 	setup_roles()
-	setup_test_users()
 	setup_email_templates_and_settings()
 	setup_workflow()
 	setup_kanban_board()
-	clear_and_seed_data()
 	setup_workspace_sidebar()
+	setup_desktop_icon()
 	frappe.db.commit()

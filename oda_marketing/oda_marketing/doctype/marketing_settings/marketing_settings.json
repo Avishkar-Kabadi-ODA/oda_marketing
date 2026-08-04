@@ -7,6 +7,7 @@
   "email_notifications_section",
   "enable_email_notifications",
   "enable_auto_overdue_flag",
+  "default_sla_lead_days",
   "column_break_1",
   "default_publisher",
   "default_content_calendar",
@@ -34,16 +35,23 @@
    "label": "Master Switches & Operational Defaults"
   },
   {
-   "default": "1",
+   "default": "0",
    "fieldname": "enable_email_notifications",
    "fieldtype": "Check",
    "label": "Enable Email Notifications"
   },
   {
-   "default": "1",
+   "default": "0",
    "fieldname": "enable_auto_overdue_flag",
    "fieldtype": "Check",
    "label": "Enable Automatic Overdue Risk Flagging"
+  },
+  {
+   "default": "14",
+   "fieldname": "default_sla_lead_days",
+   "fieldtype": "Int",
+   "label": "Default SLA Lead Time (Days)",
+   "reqd": 1
   },
   {
    "fieldname": "column_break_1",
@@ -106,58 +114,72 @@
    "label": "Marketing Copilot AI Configuration & Prompt Templates"
   },
   {
-   "default": "1",
+   "default": "0",
    "fieldname": "enable_ai_copilot",
    "fieldtype": "Check",
    "label": "Enable AI Copilot Automated Review & Gatekeeper"
   },
   {
-   "default": "90",
+   "default": "80",
+   "depends_on": "eval:doc.enable_ai_copilot",
    "fieldname": "ai_copilot_passing_score",
    "fieldtype": "Int",
-   "label": "AI Copilot Minimum Passing Score (%)"
+   "label": "AI Copilot Minimum Passing Score (%)",
+   "mandatory_depends_on": "eval:doc.enable_ai_copilot"
   },
   {
    "default": "APIM Gateway",
+   "depends_on": "eval:doc.enable_ai_copilot",
    "fieldname": "ai_provider",
    "fieldtype": "Select",
    "label": "AI LLM Provider / Architecture",
+   "mandatory_depends_on": "eval:doc.enable_ai_copilot",
    "options": "APIM Gateway\nOpenAI\nGoogle Gemini\nAnthropic\nCustom"
   },
   {
+   "depends_on": "eval:doc.enable_ai_copilot",
    "fieldname": "ai_api_key_var",
    "fieldtype": "Link",
    "label": "API Key / Subscription Key (Env Variable)",
+   "mandatory_depends_on": "eval:doc.enable_ai_copilot",
    "options": "Env Variable"
   },
   {
+   "depends_on": "eval:doc.enable_ai_copilot",
    "fieldname": "ai_endpoint_var",
    "fieldtype": "Link",
    "label": "APIM / Endpoint URL (Env Variable)",
+   "mandatory_depends_on": "eval:doc.enable_ai_copilot",
    "options": "Env Variable"
   },
   {
    "default": "gpt-4o",
+   "depends_on": "eval:doc.enable_ai_copilot",
    "fieldname": "ai_model_name",
    "fieldtype": "Data",
-   "label": "Model Name (e.g. gpt-4o, gemini-1.5-pro)"
+   "label": "Model Name (e.g. gpt-4o, gemini-1.5-pro)",
+   "mandatory_depends_on": "eval:doc.enable_ai_copilot"
   },
   {
+   "depends_on": "eval:doc.enable_ai_copilot",
    "fieldname": "subagent_meta_prompt",
    "fieldtype": "Code",
-   "label": "Subagent Meta-Prompt Template (Prompt Generator)"
+   "label": "Subagent Meta-Prompt Template (Prompt Generator)",
+   "mandatory_depends_on": "eval:doc.enable_ai_copilot"
   },
   {
+   "depends_on": "eval:doc.enable_ai_copilot",
    "fieldname": "evaluator_default_prompt",
    "fieldtype": "Code",
-   "label": "Default Evaluator Base Prompt / Rubric Template"
+   "label": "Default Evaluator Base Prompt / Rubric Template",
+   "mandatory_depends_on": "eval:doc.enable_ai_copilot"
   }
  ],
  "icon": "settings",
  "idx": 0,
  "issingle": 1,
  "links": [],
- "modified": "2026-08-03 12:38:00",
+ "modified": "2026-08-04 21:13:00",
  "modified_by": "Administrator",
  "module": "ODA Marketing",
  "name": "Marketing Settings",

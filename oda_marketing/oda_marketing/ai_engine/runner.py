@@ -61,9 +61,6 @@ def run_ai_review(docname):
 			doc.status = "In Revision"
 			doc.save(ignore_permissions=True)
 
-			# Notify Content Writer
-			notify_writer_copilot_failed(doc, score, feedback)
-
 		else:
 			publish_stream_event(
 				docname, assigned_user,
@@ -74,12 +71,6 @@ def run_ai_review(docname):
 			doc.workflow_state = "In Review - Technical"
 			doc.status = "In Review - Technical"
 			doc.save(ignore_permissions=True)
-
-			# Trigger workflow email notification to Technical Reviewer & stakeholders
-			try:
-				doc.trigger_workflow_notifications()
-			except Exception as ne:
-				frappe.log_error(f"Error sending Technical Reviewer email for {docname}: {str(ne)}")
 
 		frappe.db.commit()
 

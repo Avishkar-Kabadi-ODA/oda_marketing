@@ -6,13 +6,40 @@ import frappe
 from frappe.utils import getdate, add_days, nowdate
 from frappe.model.workflow import apply_workflow
 from oda_marketing.permissions import get_content_item_permission_query_conditions, has_content_item_permission
-from oda_marketing.setup_fixtures import setup_test_users, setup_roles, run_setup
+from oda_marketing.setup_fixtures import setup_roles, run_setup
+
+
+def create_unit_test_users():
+	test_users = [
+		{"email": "lead.test@oda.local", "first_name": "Marketing", "last_name": "Lead Test", "role": "Marketing Lead"},
+		{"email": "writer.test@oda.local", "first_name": "Content", "last_name": "Writer Test", "role": "Content Writer"},
+		{"email": "Avishkar.Kabadi@optimumdataanalytics.com", "first_name": "Avishkar", "last_name": "Kabadi", "role": "Technical Reviewer"},
+		{"email": "Mrudula.Saradar@optimumdataanalytics.com", "first_name": "Mrudula", "last_name": "Saradar", "role": "Marketing Lead"},
+	]
+	for u in test_users:
+		if not frappe.db.exists("User", u["email"]):
+			user = frappe.get_doc({
+				"doctype": "User",
+				"email": u["email"],
+				"first_name": u["first_name"],
+				"last_name": u["last_name"],
+				"enabled": 1,
+				"send_welcome_email": 0,
+				"user_type": "System User",
+				"roles": [
+					{"role": u["role"]}
+				]
+			})
+			user.insert(ignore_permissions=True)
+			from frappe.utils.password import update_password
+			update_password(u["email"], "Password123!")
 
 
 class TestMarketingOperationsFlow(unittest.TestCase):
 	def setUp(self):
 		frappe.set_user("Administrator")
 		run_setup()
+		create_unit_test_users()
 		frappe.db.delete("Content Item")
 		frappe.db.delete("Content Calendar")
 		frappe.db.commit()

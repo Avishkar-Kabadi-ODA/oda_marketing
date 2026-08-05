@@ -22,32 +22,6 @@ def setup_roles():
 			print(f"Created Role: {r['role_name']}")
 
 
-def setup_test_users():
-	test_users = [
-		{"email": "lead.test@oda.local", "first_name": "Marketing", "last_name": "Lead Test", "role": "Marketing Lead"},
-		{"email": "writer.test@oda.local", "first_name": "Content", "last_name": "Writer Test", "role": "Content Writer"},
-		{"email": "Avishkar.Kabadi@optimumdataanalytics.com", "first_name": "Avishkar", "last_name": "Kabadi", "role": "Technical Reviewer"},
-		{"email": "Mrudula.Saradar@optimumdataanalytics.com", "first_name": "Mrudula", "last_name": "Saradar", "role": "Marketing Lead"},
-	]
-	for u in test_users:
-		if not frappe.db.exists("User", u["email"]):
-			user = frappe.get_doc({
-				"doctype": "User",
-				"email": u["email"],
-				"first_name": u["first_name"],
-				"last_name": u["last_name"],
-				"enabled": 1,
-				"send_welcome_email": 0,
-				"user_type": "System User",
-				"roles": [
-					{"role": u["role"]}
-				]
-			})
-			user.insert(ignore_permissions=True)
-			from frappe.utils.password import update_password
-			update_password(u["email"], "Password123!")
-			print(f"Created User: {u['email']}")
-
 
 def setup_email_templates_and_settings():
 	templates = [
@@ -167,9 +141,10 @@ def setup_email_templates_and_settings():
 			et.insert(ignore_permissions=True)
 			print(f"Created/Updated Email Template: {t['name']}")
 
-	# Production Defaults: Enable email notifications by default
+	# Initial Setup Defaults: Keep optional features (email notifications & AI copilot) disabled by default
+	# to allow clean installation without requiring pre-configured publisher/API settings.
 	settings = frappe.get_single("Marketing Settings")
-	settings.enable_email_notifications = 1
+	settings.enable_email_notifications = 0
 	settings.enable_auto_overdue_flag = 0
 	settings.enable_ai_copilot = 0
 	settings.default_sla_lead_days = 14
@@ -357,86 +332,6 @@ def setup_kanban_board():
 	board.insert(ignore_permissions=True)
 	print(f"Created Kanban Board: {board_name}")
 
-
-def seed_demo_data():
-	"""Developer/Testing helper: Seeds realistic Content Calendar & Content Items."""
-	print("Seeding demo data...")
-	import os
-	public_files = frappe.get_site_path("public", "files")
-	sample_files = [
-		"sample_draft.txt", "updated_draft.txt", "primary_draft.pdf",
-		"asset_1.png", "asset_2.png"
-	]
-	for fname in sample_files:
-		fpath = os.path.join(public_files, fname)
-		if not os.path.exists(fpath):
-			try:
-				with open(fpath, "w") as f:
-					f.write(f"Sample test content for {fname} deliverable draft.")
-			except Exception:
-				pass
-
-	cal_name = "2026 Global Marketing Operations Calendar"
-	if not frappe.db.exists("Content Calendar", cal_name):
-		cal = frappe.get_doc({
-			"doctype": "Content Calendar",
-			"calendar_name": cal_name,
-			"from_date": "2026-01-01",
-			"to_date": "2026-12-31",
-			"status": "Active",
-			"description": "Annual 2026 content calendar for Optimum Data Analytics covering HCLS, Pharma, Fintech, and AgTech verticals."
-		})
-		cal.insert(ignore_permissions=True)
-
-	tech_rev = "Avishkar.Kabadi@optimumdataanalytics.com"
-
-	sample_items = [
-		{
-			"title": "AI-Driven Clinical Decision Support Systems in HCLS",
-			"content_type": "Blog",
-			"topic": "Exploring how GenAI models assist oncologists in personalized treatment planning.",
-			"practice_area": "HCLS",
-			"planned_publish_date": "2026-08-15",
-			"assigned_to": "writer.test@oda.local",
-			"reviewer_technical": tech_rev,
-			"content_file_1": "/files/sample_draft.txt",
-			"target_state": "Published",
-			"published_url": "https://optimumdataanalytics.com/insights/ai-clinical-decision-support"
-		},
-		{
-			"title": "Real-Time Cold Chain Visibility in Pharma Supply Chains",
-			"content_type": "Blog",
-			"topic": "IoT sensors and predictive temperature logging for vaccine transport integrity.",
-			"practice_area": "Pharma Supply Chain",
-			"planned_publish_date": "2026-08-22",
-			"assigned_to": "writer.test@oda.local",
-			"reviewer_technical": tech_rev,
-			"content_file_1": "/files/sample_draft.txt",
-			"target_state": "In Review - Technical"
-		}
-	]
-
-	for data in sample_items:
-		if not frappe.db.exists("Content Item", {"title": data["title"]}):
-			item = frappe.get_doc({
-				"doctype": "Content Item",
-				"title": data["title"],
-				"content_type": data["content_type"],
-				"topic": data["topic"],
-				"practice_area": data["practice_area"],
-				"content_calendar": cal_name,
-				"planned_publish_date": data["planned_publish_date"],
-				"assigned_to": data["assigned_to"],
-				"reviewer_technical": data["reviewer_technical"],
-				"content_file_1": data.get("content_file_1", ""),
-				"published_url": data.get("published_url", ""),
-				"owner": data["assigned_to"]
-			})
-			item.insert(ignore_permissions=True)
-			if data["target_state"] != "Planned":
-				item.db_set("workflow_state", data["target_state"])
-
-	frappe.db.commit()
 
 
 def setup_workspace_sidebar():

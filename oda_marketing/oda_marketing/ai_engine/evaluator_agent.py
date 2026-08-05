@@ -70,7 +70,7 @@ Evaluate this deliverable according to your System Prompt criteria and output va
 				raw_content = res_data["choices"][0]["message"]["content"]
 				res_json = json.loads(raw_content)
 
-				frappe.log_error(f"DEBUG OpenAI JSON Response: {raw_content}")
+				frappe.logger().debug(f"DEBUG OpenAI JSON Response: {raw_content}")
 				print("="*40)
 				print("DEBUG OpenAI JSON Response:")
 				print(raw_content)

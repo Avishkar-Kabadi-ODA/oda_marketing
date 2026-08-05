@@ -11,8 +11,8 @@ frappe.views.calendar["Content Item"] = {
 		"Planned": "info",
 		"Briefed": "info",
 		"In Progress": "warning",
+		"Marketing Copilot Review": "info",
 		"In Review - Technical": "warning",
-		"In Review - Business": "purple",
 		"In Revision": "danger",
 		"Approved": "success",
 		"Published": "success"

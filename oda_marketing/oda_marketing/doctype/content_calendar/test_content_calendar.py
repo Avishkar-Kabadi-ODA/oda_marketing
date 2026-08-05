@@ -9,6 +9,7 @@ from oda_marketing.setup_fixtures import run_setup
 
 class TestContentCalendar(FrappeTestCase):
 	def setUp(self):
+		frappe.set_user("Administrator")
 		run_setup()
 
 	def test_calendar_creation_and_item_linkage(self):

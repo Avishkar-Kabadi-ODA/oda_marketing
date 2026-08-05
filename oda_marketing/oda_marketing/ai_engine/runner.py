@@ -61,6 +61,8 @@ def run_ai_review(docname):
 
 		# Stage 3: Gatekeeper Decision Branching (Configurable Threshold)
 		target_state = "In Revision" if score < passing_score else "In Review - Technical"
+		if target_state == "In Revision" and feedback:
+			doc.revision_feedback_notes = f"AI Copilot Review Feedback (Score: {score}%):\n" + feedback
 
 		publish_stream_event(
 			docname, assigned_user,
@@ -74,6 +76,10 @@ def run_ai_review(docname):
 		doc.status = target_state
 		doc.flags.ignore_workflow = True
 		doc.save(ignore_permissions=True)
+
+		# Send email notification to writer when AI score fails threshold
+		if score < passing_score:
+			notify_writer_copilot_failed(doc, score, feedback)
 
 		frappe.db.commit()
 

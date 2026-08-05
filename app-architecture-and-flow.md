@@ -45,8 +45,7 @@ Access permissions and email dispatches use the exact user mapping matrix below:
 | Workflow State | Recipient (`recipients`) | CC (`cc`) | Template Used | Greeting & Content |
 | :--- | :--- | :--- | :--- | :--- |
 | **`Briefed`** | Content Writer (`assigned_to`) | Deliverable Creator (`owner`) | `writer_email_template` | `"Hello {{ assigned_to_name }}"`, task instructions & planned publish date |
-| **`In Review - Technical`** | Technical Reviewer (`reviewer_technical`) | Business Reviewer, Creator (`owner`), Default Publisher | `reviewer_email_template` | `"Hello {{ reviewer_technical_name }}"`, technical review request with draft links |
-| **`In Review - Business`** | Business Reviewer (`reviewer_business`) | Default Publisher, Creator (`owner`), Content Writer (`assigned_to`) | `reviewer_email_template` | `"Hello {{ reviewer_business_name }}"`, business review request with draft links |
+| **`In Review - Technical`** | Technical Reviewer (`reviewer_technical`) | Creator (`owner`), Default Publisher | `reviewer_email_template` | `"Hello {{ reviewer_technical_name }}"`, technical review request with draft links |
 | **`In Revision`** | Content Writer (`assigned_to`) | Deliverable Creator (`owner`) | `writer_email_template` | `"Hello {{ assigned_to_name }}"`, revision requested with feedback notes |
 | **`Approved`** | Default Publisher (`default_publisher`) | Creator (`owner`), Content Writer (`assigned_to`) | `publisher_email_template` | `"Hello {{ publisher_name }}"`, deliverable approved for publishing |
 | **`Published`** | **Content Writer ONLY** (`assigned_to`) | None | `published_email_template` | `"Hello {{ assigned_to_name }}"`, congratulations email with live published URL |
@@ -64,8 +63,8 @@ Access permissions and email dispatches use the exact user mapping matrix below:
 - **Key Fields**:
   - `title`, `content_type`, `topic`, `practice_area` (*HCLS, Pharma, Fintech, AgTech, Cross-domain*).
   - `content_calendar`, `planned_publish_date`, `sla_due_date`, `risk_flag` (*On track, At risk, Late*).
-  - `assigned_to` (Writer), `reviewer_technical` (SME), `reviewer_business` (Marketing Manager).
-  - `status` / `workflow_state` (*Planned, Briefed, In Progress, In Review - Technical, In Review - Business, In Revision, Approved, Published*).
+  - `assigned_to` (Writer), `reviewer_technical` (SME).
+  - `status` / `workflow_state` (*Planned, Briefed, In Progress, Marketing Copilot Review, In Review - Technical, In Revision, Approved, Published*).
   - **Writer's Attachment Slots**:
     - `content_file_1` (Attach - **Primary Content Draft (Mandatory for Review)**).
     - `content_file_2` (Attach - Writer's Supporting Asset 1 (Optional)).
@@ -82,7 +81,6 @@ Access permissions and email dispatches use the exact user mapping matrix below:
 | **Default Publisher** | Full (`create: 1, delete: 1`) | Can view all deliverables and edit publishing details. | Full View & Download. |
 | **Content Writer** | **Blocked** (`create: 0, delete: 0`) | Core metadata fields are **read-only**. Can ONLY upload/edit draft attachments (`content_file_1`, `content_file_2`, `content_file_3`), add notes, and transition state to `In Review`. | View, Download & Upload Draft Files. |
 | **Technical Reviewer** | **Blocked** (`create: 0, delete: 0`) | Core metadata & draft attachments are **read-only**. Can ONLY edit `revision_feedback_notes` when requesting changes and transition states (`Approve Technical`, `Request Changes`). | Full View & Download (Cannot Replace Writer Files). |
-| **Business Reviewer** | **Blocked** (`create: 0, delete: 0`) | Core metadata & draft attachments are **read-only**. Can ONLY edit `revision_feedback_notes` when requesting changes and transition states (`Approve Business`, `Request Changes`). | Full View & Download (Cannot Replace Writer Files). |
 
 ---
 

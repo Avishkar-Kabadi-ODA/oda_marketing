@@ -5,7 +5,13 @@ import frappe
 
 
 def has_app_permission(user=None):
-	return True
+	if not user:
+		user = frappe.session.user
+	if user == "Administrator":
+		return True
+	roles = frappe.get_roles(user)
+	allowed = {"System Manager", "Marketing Lead", "Content Writer", "Technical Reviewer"}
+	return bool(allowed & set(roles))
 
 
 def get_default_publisher():

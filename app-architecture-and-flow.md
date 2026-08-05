@@ -52,6 +52,24 @@ Access permissions and email dispatches use the exact user mapping matrix below:
 
 ---
 
+## 3. Email Recipient, CC & Greeting Protocol
+
+Access permissions and email dispatches use the exact user mapping matrix below. Every email template includes a direct CTA button link (`content_item_url`) pointing to the Content Item form in Desk:
+
+| Workflow State | Recipient (`recipients`) | CC (`cc`) | Template Used | Greeting & Content |
+| :--- | :--- | :--- | :--- | :--- |
+| **`Briefed`** | Content Writer (`assigned_to`) | Deliverable Creator (`owner`) | `writer_email_template` | `"Hello {{ assigned_to_name }}"`, task instructions, planned publish date & Desk link |
+| **`In Review - Technical`** | Technical Reviewer (`reviewer_technical`) | Creator (`owner`), Writer, Default Publisher | `reviewer_email_template` | `"Hello {{ reviewer_technical_name }}"`, technical review request with draft & Desk links |
+| **`In Revision`** | Content Writer (`assigned_to`) | Deliverable Creator (`owner`) | `writer_email_template` | `"Hello {{ assigned_to_name }}"`, revision requested with feedback notes & Desk link |
+| **`Approved`** | Default Publisher (`default_publisher`) | Creator (`owner`), Content Writer (`assigned_to`) | `publisher_email_template` | `"Hello {{ publisher_name }}"`, deliverable approved for publishing & Desk link |
+| **`Published`** | **Content Writer ONLY** (`assigned_to`) | None | `published_email_template` | `"Hello {{ assigned_to_name }}"`, congratulations email with live published URL & Desk link |
+| **`Overdue SLA`** | Writer (`assigned_to`), Reviewer (`reviewer_technical`) | None | `overdue_sla_email_template` | Escalation alert with SLA Due Date & Desk link |
+
+> [!NOTE]
+> `trigger_workflow_notifications()` and `trigger_system_notifications()` utilize `doc.flags.previous_workflow_state` prior to state mutations so that both manual transitions and automated AI Copilot evaluations reliably queue emails and in-app notifications.
+
+---
+
 ## 4. DocType Data Model Summary
 
 ### 1. `Content Calendar` (Master Setup)
@@ -94,5 +112,9 @@ ODA Marketing
 │
 └── Setup
     ├── Content Calendar (Master Calendar Setup)
-    └── Marketing Settings (Email, Publisher & Template Configuration)
+    ├── Marketing Settings (Email, Publisher & Template Configuration)
+    └── Env Variables (Encrypted API Credentials)
 ```
+
+> [!TIP]
+> `setup_workspace_sidebar()` in `setup_fixtures.py` handles sidebar updates idempotently by deleting existing parent and child entries (`tabWorkspace Sidebar Item`) via `frappe.delete_doc()`, preventing duplicate sidebar entries on migrations.

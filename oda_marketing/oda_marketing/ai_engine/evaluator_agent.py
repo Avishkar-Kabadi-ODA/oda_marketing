@@ -130,14 +130,17 @@ def run_heuristic_mock_evaluation(doc, draft_text):
 	settings = frappe.get_single("Marketing Settings")
 	passing_score = int(getattr(settings, "ai_copilot_passing_score", 80) or 80)
 
-	text_len = len(draft_text.strip())
+	text_len = len((draft_text or "").strip())
 	has_attachment = bool(doc.content_file_1)
-	has_topic_match = any(word.lower() in draft_text.lower() for word in (doc.topic or "").split() if len(word) > 3)
+	has_topic_match = any(
+		word.lower() in draft_text.lower() or word.lower() in (doc.title or "").lower()
+		for word in (doc.topic or "").split() if len(word) > 3
+	)
 
-	# If draft has rich technical content or primary attachment -> Pass with 92%
-	if (has_attachment or text_len > 250) and (has_topic_match or text_len > 300):
+	# If draft has primary attachment, rich content, or topic match -> Pass with 92%
+	if (has_attachment or text_len > 100) and (has_topic_match or has_attachment or text_len > 200):
 		score = 92
-	elif text_len > 150:
+	elif text_len > 50:
 		score = 82
 	else:
 		score = 58

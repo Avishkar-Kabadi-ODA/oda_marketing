@@ -201,7 +201,8 @@ class ContentItem(Document):
 
 	def trigger_system_notifications(self):
 		"""Sends targeted Frappe In-App Bell 🔔 Notifications to the specific user involved."""
-		previous_state = self.get_doc_before_save().workflow_state if self.get_doc_before_save() else None
+		previous_doc = self.get_doc_before_save()
+		previous_state = getattr(self.flags, "previous_workflow_state", None) or (previous_doc.workflow_state if previous_doc else None)
 		current_state = self.workflow_state
 
 		if previous_state == current_state or not current_state:
@@ -254,7 +255,8 @@ class ContentItem(Document):
 		if not settings.enable_email_notifications:
 			return
 
-		previous_state = self.get_doc_before_save().workflow_state if self.get_doc_before_save() else None
+		previous_doc = self.get_doc_before_save()
+		previous_state = getattr(self.flags, "previous_workflow_state", None) or (previous_doc.workflow_state if previous_doc else None)
 		current_state = self.workflow_state
 
 		if previous_state == current_state or not current_state:

@@ -1,6 +1,6 @@
 {
  "app": "oda_marketing",
- "creation": "2026-08-05 11:40:53.812683",
+ "creation": "2026-08-05 12:18:39.358946",
  "docstatus": 0,
  "doctype": "Workspace Sidebar",
  "header_icon": "megaphone",
@@ -77,7 +77,7 @@
    "type": "Link"
   }
  ],
- "modified": "2026-08-05 11:40:53.812683",
+ "modified": "2026-08-05 12:18:39.358946",
  "modified_by": "Administrator",
  "name": "ODA Marketing",
  "owner": "Administrator",

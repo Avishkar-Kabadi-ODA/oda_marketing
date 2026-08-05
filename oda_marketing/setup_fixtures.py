@@ -131,7 +131,10 @@ def setup_email_templates_and_settings():
 {% if doc.published_url %}
   <p><b>Live Asset URL:</b> <a href="{{ doc.published_url }}" target="_blank">{{ doc.published_url }}</a></p>
 {% endif %}
-<p>Thank you for your hard work on this deliverable.</p>"""
+<p>Thank you for your hard work on this deliverable.</p>
+<div style='margin-top: 15px;'>
+  <a href="{{ content_item_url }}" target="_blank" style="display: inline-block; background-color: #059669; color: #ffffff; padding: 10px 18px; text-decoration: none; border-radius: 6px; font-weight: 600;">View Content Item in Desk</a>
+</div>"""
 		},
 		{
 			"name": "Marketing Overdue SLA Alert",
@@ -164,9 +167,9 @@ def setup_email_templates_and_settings():
 			et.insert(ignore_permissions=True)
 			print(f"Created/Updated Email Template: {t['name']}")
 
-	# Production Defaults: Master switches set to 0 (Disabled by default)
+	# Production Defaults: Enable email notifications by default
 	settings = frappe.get_single("Marketing Settings")
-	settings.enable_email_notifications = 0
+	settings.enable_email_notifications = 1
 	settings.enable_auto_overdue_flag = 0
 	settings.enable_ai_copilot = 0
 	settings.default_sla_lead_days = 14
@@ -293,9 +296,11 @@ def setup_workflow():
 		{"state": "In Revision", "action": "Submit for Technical Review", "next_state": "In Review - Technical", "allowed": "Marketing Lead"},
 		{"state": "In Revision", "action": "Submit for Technical Review", "next_state": "In Review - Technical", "allowed": "System Manager"},
 
+		{"state": "Marketing Copilot Review", "action": "Approve AI Copilot", "next_state": "In Review - Technical", "allowed": "Content Writer"},
 		{"state": "Marketing Copilot Review", "action": "Approve AI Copilot", "next_state": "In Review - Technical", "allowed": "Marketing Lead"},
 		{"state": "Marketing Copilot Review", "action": "Approve AI Copilot", "next_state": "In Review - Technical", "allowed": "System Manager"},
 
+		{"state": "Marketing Copilot Review", "action": "Request Changes", "next_state": "In Revision", "allowed": "Content Writer"},
 		{"state": "Marketing Copilot Review", "action": "Request Changes", "next_state": "In Revision", "allowed": "Marketing Lead"},
 		{"state": "Marketing Copilot Review", "action": "Request Changes", "next_state": "In Revision", "allowed": "System Manager"},
 
@@ -356,6 +361,21 @@ def setup_kanban_board():
 def seed_demo_data():
 	"""Developer/Testing helper: Seeds realistic Content Calendar & Content Items."""
 	print("Seeding demo data...")
+	import os
+	public_files = frappe.get_site_path("public", "files")
+	sample_files = [
+		"sample_draft.txt", "updated_draft.txt", "primary_draft.pdf",
+		"asset_1.png", "asset_2.png"
+	]
+	for fname in sample_files:
+		fpath = os.path.join(public_files, fname)
+		if not os.path.exists(fpath):
+			try:
+				with open(fpath, "w") as f:
+					f.write(f"Sample test content for {fname} deliverable draft.")
+			except Exception:
+				pass
+
 	cal_name = "2026 Global Marketing Operations Calendar"
 	if not frappe.db.exists("Content Calendar", cal_name):
 		cal = frappe.get_doc({

@@ -70,12 +70,22 @@ def run_ai_review(docname):
 			progress=100
 		)
 
-		doc.db_set("workflow_state", target_state, update_modified=False)
-		doc.db_set("status", target_state, update_modified=False)
+		doc.flags.previous_workflow_state = doc.workflow_state
 		doc.workflow_state = target_state
 		doc.status = target_state
-		doc.flags.ignore_workflow = True
-		doc.save(ignore_permissions=True)
+
+		doc.db_set({
+			"ai_score": score,
+			"ai_review_status": "Completed",
+			"ai_generated_prompt": dynamic_prompt,
+			"ai_copilot_feedback": feedback,
+			"workflow_state": target_state,
+			"status": target_state,
+			"revision_feedback_notes": doc.revision_feedback_notes if target_state == "In Revision" else doc.get("revision_feedback_notes")
+		})
+
+		doc.trigger_workflow_notifications()
+		doc.trigger_system_notifications()
 
 		# Send email notification to writer when AI score fails threshold
 		if score < passing_score:
@@ -97,6 +107,7 @@ def notify_writer_copilot_failed(doc, score, feedback):
 		return
 
 	try:
+		item_url = doc.get_template_context().get("content_item_url")
 		subject = f"[COPILOT REVISION REQUIRED] Deliverable '{doc.title}' AI Quality Score: {score}%"
 		message = f"""<p>Hello <b>{doc.get_user_full_name(doc.assigned_to)}</b>,</p>
 <p>Your content deliverable <b>{doc.title}</b> has been evaluated by the <b>Marketing Copilot Agent</b>.</p>
@@ -105,8 +116,9 @@ def notify_writer_copilot_failed(doc, score, feedback):
 <div style="background-color: #f8fafc; border-left: 4px solid #3b82f6; padding: 15px; margin: 15px 0;">
   {feedback}
 </div>
-<p>Log into the portal to review full details and re-upload your draft.</p>
-"""
+<div style="margin-top: 15px;">
+  <a href="{item_url}" target="_blank" style="display: inline-block; background-color: #4F46E5; color: #ffffff; padding: 10px 18px; text-decoration: none; border-radius: 6px; font-weight: 600;">View Content Item in Desk</a>
+</div>"""
 		frappe.sendmail(
 			recipients=[doc.assigned_to],
 			subject=subject,

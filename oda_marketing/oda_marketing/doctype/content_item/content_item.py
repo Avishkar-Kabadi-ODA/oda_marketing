@@ -83,7 +83,14 @@ class ContentItem(Document):
 		settings = frappe.get_single("Marketing Settings")
 		enable_ai = getattr(settings, "enable_ai_copilot", 0)
 
-		if wf_state == "Marketing Copilot Review":
+		if wf_state == "In Review - Technical" and enable_ai and not getattr(frappe.flags, "in_ai_copilot_review", False):
+			before = self.get_doc_before_save()
+			if not before or before.workflow_state in ["Briefed", "In Progress", "In Revision"] or self.ai_review_status != "Completed":
+				self.workflow_state = "Marketing Copilot Review"
+				self.status = "Marketing Copilot Review"
+				self.ai_review_status = "Queued"
+
+		elif wf_state == "Marketing Copilot Review":
 			if not enable_ai:
 				# If AI Copilot is disabled, bypass Marketing Copilot Review state completely
 				self.workflow_state = "In Review - Technical"

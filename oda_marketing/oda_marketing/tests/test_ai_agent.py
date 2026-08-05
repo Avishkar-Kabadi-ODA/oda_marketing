@@ -110,14 +110,70 @@ class TestAIAgentEngine(unittest.TestCase):
 		self.assertTrue(updated_item.ai_score >= 0)
 		self.assertTrue(len(updated_item.ai_copilot_feedback) > 10)
 		self.assertTrue(len(updated_item.ai_generated_prompt) > 10)
+		self.assertEqual(len(updated_item.ai_reviews), 1)
+
+		# Run second AI review and verify thread history persists multiple entries
+		run_ai_review(item.name)
+		updated_item_2 = frappe.get_doc("Content Item", item.name)
+		self.assertEqual(len(updated_item_2.ai_reviews), 2)
 
 		settings = frappe.get_single("Marketing Settings")
 		passing = int(getattr(settings, "ai_copilot_passing_score", 80) or 80)
 
-		if updated_item.ai_score < passing:
-			self.assertEqual(updated_item.workflow_state, "In Revision")
+		if updated_item_2.ai_score < passing:
+			self.assertEqual(updated_item_2.workflow_state, "In Revision")
 		else:
-			self.assertEqual(updated_item.workflow_state, "In Review - Technical")
+			self.assertEqual(updated_item_2.workflow_state, "In Review - Technical")
+
+	def test_submit_for_technical_review_auto_routes_copilot(self):
+		"""Tests that setting workflow_state to 'In Review - Technical' automatically triggers Marketing Copilot Review when AI is enabled."""
+		item = frappe.get_doc({
+			"doctype": "Content Item",
+			"title": "Automated Copilot Test Item",
+			"content_type": "Blog",
+			"topic": "Testing automated Copilot interception on submission.",
+			"practice_area": "Fintech",
+			"content_calendar": "2026 Global Marketing Operations Calendar",
+			"planned_publish_date": "2026-09-01",
+			"assigned_to": "writer.test@oda.local",
+			"reviewer_technical": "Avishkar.Kabadi@optimumdataanalytics.com",
+			"content_file_1": "/files/sample_draft.txt"
+		})
+		item.insert(ignore_permissions=True)
+
+		item.workflow_state = "Briefed"
+		item.save(ignore_permissions=True)
+
+		item.workflow_state = "In Progress"
+		item.save(ignore_permissions=True)
+
+		item.workflow_state = "In Review - Technical"
+		item.save(ignore_permissions=True)
+
+		self.assertEqual(item.workflow_state, "Marketing Copilot Review")
+		self.assertEqual(item.ai_review_status, "Queued")
+
+	def test_email_notifications_disabled(self):
+		"""Tests that no email is sent when enable_email_notifications is unchecked."""
+		frappe.db.set_single_value("Marketing Settings", "enable_email_notifications", 0)
+		frappe.clear_cache()
+
+		item = frappe.get_doc({
+			"doctype": "Content Item",
+			"title": "Email Toggle Test Item",
+			"content_type": "Blog",
+			"topic": "Testing email toggle setting.",
+			"practice_area": "HCLS",
+			"content_calendar": "2026 Global Marketing Operations Calendar",
+			"planned_publish_date": "2026-09-01",
+			"assigned_to": "writer.test@oda.local",
+			"reviewer_technical": "Avishkar.Kabadi@optimumdataanalytics.com"
+		})
+
+		from oda_marketing.oda_marketing.ai_engine.runner import notify_writer_copilot_failed
+		frappe.flags.sent_mails = []
+		notify_writer_copilot_failed(item, 50, "Failed feedback")
+		self.assertEqual(len(getattr(frappe.flags, "sent_mails", [])), 0)
 
 	def tearDown(self):
 		frappe.db.rollback()

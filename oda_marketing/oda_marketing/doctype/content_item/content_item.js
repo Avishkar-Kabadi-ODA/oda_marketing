@@ -39,22 +39,14 @@ frappe.ui.form.on("Content Item", {
 					frm.set_df_property("ai_reviews", "hidden", 1);
 				}
 
-				// Filter workflow actions based on Copilot enable switch
-				const is_lead = frappe.user.has_role("Marketing Lead") || frappe.user.has_role("System Manager") || frappe.session.user === "Administrator";
+				// Clean up workflow action buttons: users always use "Submit for Technical Review"
 				setTimeout(() => {
-					if (enable_ai) {
-						if (!is_lead && ["Briefed", "In Progress", "In Revision"].includes(frm.doc.workflow_state)) {
-							frm.page.clear_action_item(__("Submit for Technical Review"));
-							frm.page.remove_inner_button(__("Submit for Technical Review"));
-						}
-					} else {
-						frm.page.clear_action_item(__("Submit for Copilot Review"));
-						frm.page.remove_inner_button(__("Submit for Copilot Review"));
-						frm.page.clear_action_item(__("Resubmit Draft"));
-						frm.page.remove_inner_button(__("Resubmit Draft"));
-						frm.page.clear_action_item(__("Approve AI Copilot"));
-						frm.page.remove_inner_button(__("Approve AI Copilot"));
-					}
+					frm.page.clear_action_item(__("Submit for Copilot Review"));
+					frm.page.remove_inner_button(__("Submit for Copilot Review"));
+					frm.page.clear_action_item(__("Resubmit Draft"));
+					frm.page.remove_inner_button(__("Resubmit Draft"));
+					frm.page.clear_action_item(__("Approve AI Copilot"));
+					frm.page.remove_inner_button(__("Approve AI Copilot"));
 				}, 300);
 			}
 		});
@@ -117,9 +109,11 @@ frappe.ui.form.on("Content Item", {
 		// Hidden for all users on form view (viewable in Marketing Settings)
 		frm.set_df_property("ai_generated_prompt", "hidden", 1);
 
-		// AI Copilot Feedback & Improvements: visible to assigned writer or owner (and Marketing Lead/Admin)
-		const is_assigned_writer = (frappe.session.user === frm.doc.assigned_to) || (frappe.session.user === frm.doc.owner);
-		const can_see_ai_feedback = frm.doc.ai_copilot_feedback && (is_assigned_writer || is_lead);
-		frm.set_df_property("ai_copilot_feedback", "hidden", can_see_ai_feedback ? 0 : 1);
+		// AI Copilot Feedback & Review History Thread: visible ONLY to Content Writer (assigned writer / owner / Content Writer role) and Marketing Lead / System Manager
+		const is_assigned_writer = (frappe.session.user === frm.doc.assigned_to) || (frappe.session.user === frm.doc.owner) || frappe.user.has_role("Content Writer");
+		const can_see_ai_feedback = is_assigned_writer || is_lead;
+
+		frm.set_df_property("ai_copilot_feedback", "hidden", (can_see_ai_feedback && frm.doc.ai_copilot_feedback) ? 0 : 1);
+		frm.set_df_property("ai_reviews", "hidden", (can_see_ai_feedback && frm.doc.ai_reviews && frm.doc.ai_reviews.length > 0) ? 0 : 1);
 	}
 });

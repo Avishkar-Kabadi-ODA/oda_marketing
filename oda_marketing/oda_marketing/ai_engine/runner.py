@@ -75,14 +75,19 @@ def run_ai_review(docname):
 		doc.status = target_state
 
 		doc.db_set({
+			"workflow_state": target_state,
+			"status": target_state,
 			"ai_score": score,
 			"ai_review_status": "Completed",
 			"ai_generated_prompt": dynamic_prompt,
 			"ai_copilot_feedback": feedback,
-			"workflow_state": target_state,
-			"status": target_state,
 			"revision_feedback_notes": doc.revision_feedback_notes if target_state == "In Revision" else doc.get("revision_feedback_notes")
-		})
+		}, update_modified=False)
+
+		doc.flags.ignore_permissions = True
+		doc.flags.ignore_workflow = True
+		doc.flags.ignore_validate = True
+		doc.save(ignore_permissions=True)
 
 		doc.trigger_workflow_notifications()
 		doc.trigger_system_notifications()
@@ -103,6 +108,10 @@ def run_ai_review(docname):
 
 def notify_writer_copilot_failed(doc, score, feedback):
 	"""Sends an automated alert to Content Writer when AI Copilot score is below threshold."""
+	settings = frappe.get_single("Marketing Settings")
+	if not settings.enable_email_notifications:
+		return
+
 	if not doc.assigned_to:
 		return
 

@@ -421,7 +421,9 @@ def seed_demo_data():
 
 def setup_workspace_sidebar():
 	sidebar_name = "ODA Marketing"
-	frappe.db.delete("Workspace Sidebar", {"title": sidebar_name})
+	if frappe.db.exists("Workspace Sidebar", sidebar_name):
+		frappe.delete_doc("Workspace Sidebar", sidebar_name, force=True, ignore_permissions=True)
+	frappe.db.delete("Workspace Sidebar Item", {"parent": sidebar_name})
 
 	items = [
 		{

@@ -50,10 +50,14 @@ class ContentItem(Document):
 		return "Marketing Lead" in roles or "System Manager" in roles
 
 	def validate_creation_permissions(self):
+		if frappe.flags.ignore_permissions or self.flags.ignore_permissions:
+			return
 		if self.is_new() and not self.is_lead_user():
 			frappe.throw(_("Only <b>Marketing Leads</b> can create new Content Items."), frappe.PermissionError)
 
 	def validate_metadata_edit_permissions(self):
+		if frappe.flags.ignore_permissions or self.flags.ignore_permissions:
+			return
 		if not self.is_new() and not self.is_lead_user():
 			before = self.get_doc_before_save()
 			if not before:
@@ -61,13 +65,13 @@ class ContentItem(Document):
 			metadata_fields = [
 				"title", "content_type", "topic", "practice_area",
 				"content_calendar", "planned_publish_date", "assigned_to",
-				"reviewer_technical"
+				"reviewer_technical", "sla_due_date"
 			]
 			for field in metadata_fields:
 				val_self = getattr(self, field, None)
 				val_before = getattr(before, field, None)
 
-				if field == "planned_publish_date":
+				if field in ["planned_publish_date", "sla_due_date"]:
 					if val_self and val_before and getdate(val_self) != getdate(val_before):
 						frappe.throw(_("Only <b>Marketing Leads</b> are permitted to modify core item metadata ({0}).").format(field), frappe.PermissionError)
 				else:
@@ -76,7 +80,21 @@ class ContentItem(Document):
 
 	def sync_status_with_workflow(self):
 		wf_state = getattr(self, "workflow_state", None)
-		if wf_state:
+		settings = frappe.get_single("Marketing Settings")
+		enable_ai = getattr(settings, "enable_ai_copilot", 0)
+
+		if wf_state == "Marketing Copilot Review":
+			if not enable_ai:
+				# If AI Copilot is disabled, bypass Marketing Copilot Review state completely
+				self.workflow_state = "In Review - Technical"
+				self.status = "In Review - Technical"
+			else:
+				before = self.get_doc_before_save()
+				if not before or before.workflow_state != "Marketing Copilot Review":
+					# Reset AI status to Queued when submitting or re-submitting for Copilot Review
+					self.ai_review_status = "Queued"
+				self.status = self.workflow_state
+		elif wf_state:
 			self.status = wf_state
 		elif not getattr(self, "status", None):
 			self.status = "Planned"
@@ -354,8 +372,23 @@ def send_overdue_sla_notifications():
 @frappe.whitelist()
 def trigger_ai_copilot(docname):
 	"""Manual API trigger for Marketing Copilot Review."""
-	if frappe.db.exists("Content Item", docname):
-		from oda_marketing.oda_marketing.ai_engine.runner import run_ai_review
-		run_ai_review(docname)
-		return frappe.get_doc("Content Item", docname)
-	return None
+	if not frappe.db.exists("Content Item", docname):
+		frappe.throw(_("Content Item {0} not found.").format(docname), frappe.DoesNotExistError)
+
+	if not frappe.has_permission("Content Item", "write", doc=docname):
+		frappe.throw(_("You do not have permission to trigger AI Copilot Review on this Content Item."), frappe.PermissionError)
+
+	from oda_marketing.oda_marketing.ai_engine.runner import run_ai_review
+	run_ai_review(docname)
+	return frappe.get_doc("Content Item", docname)
+
+
+@frappe.whitelist()
+def get_ai_copilot_status():
+	"""Whitelisted helper to check AI Copilot status without requiring read permission on Marketing Settings DocType."""
+	try:
+		return {
+			"enable_ai_copilot": int(frappe.db.get_single_value("Marketing Settings", "enable_ai_copilot") or 0)
+		}
+	except Exception:
+		return {"enable_ai_copilot": 0}

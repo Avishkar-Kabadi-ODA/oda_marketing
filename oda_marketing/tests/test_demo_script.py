@@ -61,6 +61,11 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 		item.title = "Modified Title By Writer"
 		self.assertRaises(frappe.PermissionError, item.save)
 
+		# Writer attempts to modify SLA due date -> fails
+		item.reload()
+		item.sla_due_date = "2026-10-10"
+		self.assertRaises(frappe.PermissionError, item.save)
+
 		# Writer updates content_file_1, content_file_2, content_file_3 -> succeeds
 		item.reload()
 		item.content_file_1 = "/files/primary_draft.pdf"
@@ -205,3 +210,59 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 
 		frappe.set_user("Administrator")
 		print("End-to-end multi-stage workflow, email CTA button links, and targeted notification test passed successfully!")
+
+	def test_ai_copilot_resubmission_from_revision(self):
+		frappe.db.set_single_value("Marketing Settings", "enable_ai_copilot", 1)
+		frappe.db.set_single_value("Marketing Settings", "ai_copilot_passing_score", 80)
+		frappe.clear_cache()
+
+		tech_rev = "Avishkar.Kabadi@optimumdataanalytics.com"
+		frappe.set_user("lead.test@oda.local")
+
+		cal = frappe.get_doc({
+			"doctype": "Content Calendar",
+			"calendar_name": "Copilot Test Cal 2026",
+			"from_date": "2026-01-01",
+			"to_date": "2026-12-31",
+			"status": "Active"
+		}).insert()
+
+		item = frappe.get_doc({
+			"doctype": "Content Item",
+			"title": "AI Copilot Resubmit Item",
+			"content_type": "Blog",
+			"topic": "Testing AI re-evaluation from In Revision",
+			"practice_area": "HCLS",
+			"content_calendar": cal.name,
+			"planned_publish_date": "2026-09-01",
+			"assigned_to": "writer.test@oda.local",
+			"reviewer_technical": tech_rev,
+			"content_file_1": "/files/sample_draft.txt"
+		}).insert()
+
+		# Technical Reviewer requests changes -> In Revision
+		item.db_set({
+			"ai_score": 90,
+			"ai_review_status": "Completed",
+			"workflow_state": "In Review - Technical"
+		}, update_modified=False)
+		item.reload()
+		item.revision_feedback_notes = "Please update draft section 2."
+		item.save()
+
+		frappe.set_user(tech_rev)
+		apply_workflow(item, "Request Changes")
+		item.reload()
+		self.assertEqual(item.workflow_state, "In Revision")
+
+		# Writer resubmits draft -> enters Marketing Copilot Review, triggers AI evaluation, and moves to evaluated state
+		frappe.set_user("writer.test@oda.local")
+		item.reload()
+		item.content_file_1 = "/files/updated_draft.txt"
+		item.save()
+		apply_workflow(item, "Resubmit Draft")
+		item.reload()
+		self.assertEqual(item.ai_review_status, "Completed")
+		self.assertIn(item.workflow_state, ["In Revision", "In Review - Technical"])
+
+		frappe.set_user("Administrator")

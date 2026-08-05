@@ -11,29 +11,51 @@ frappe.ui.form.on("Content Item", {
 			}, __("Actions"));
 		}
 
-		frappe.db.get_single_value("Marketing Settings", "enable_ai_copilot").then(enable_ai => {
-			if (enable_ai) {
-				if (frm.doc.workflow_state === "Marketing Copilot Review" || frm.doc.ai_review_status === "Queued") {
-					frm.add_custom_button(__("Run AI Copilot Review Now"), function() {
-						frappe.show_progress(__("Marketing Copilot Review"), 15, 100, __("Starting AI Copilot Review..."));
-						frappe.call({
-							method: "oda_marketing.oda_marketing.doctype.content_item.content_item.trigger_ai_copilot",
-							args: { docname: frm.doc.name },
-							callback: function(r) {
-								frappe.hide_progress();
-								frappe.show_alert({ message: __("AI Copilot Review completed!"), indicator: "green" });
-								frm.reload_doc();
-							}
-						});
-					}, __("Actions"));
+		frappe.call({
+			method: "oda_marketing.oda_marketing.doctype.content_item.content_item.get_ai_copilot_status",
+			callback: function(res) {
+				const enable_ai = res && res.message ? res.message.enable_ai_copilot : 0;
+				if (enable_ai) {
+					if (frm.doc.workflow_state === "Marketing Copilot Review" || frm.doc.ai_review_status === "Queued") {
+						frm.add_custom_button(__("Run AI Copilot Review Now"), function() {
+							frappe.show_progress(__("Marketing Copilot Review"), 15, 100, __("Starting AI Copilot Review..."));
+							frappe.call({
+								method: "oda_marketing.oda_marketing.doctype.content_item.content_item.trigger_ai_copilot",
+								args: { docname: frm.doc.name },
+								callback: function(r) {
+									frappe.hide_progress();
+									frappe.show_alert({ message: __("AI Copilot Review completed!"), indicator: "green" });
+									frm.reload_doc();
+								}
+							});
+						}, __("Actions"));
+					}
+				} else {
+					// Hide AI section and evaluation fields when AI Copilot is disabled
+					frm.set_df_property("ai_section", "hidden", 1);
+					frm.set_df_property("ai_score", "hidden", 1);
+					frm.set_df_property("ai_review_status", "hidden", 1);
+					frm.set_df_property("ai_copilot_feedback", "hidden", 1);
+					frm.set_df_property("ai_reviews", "hidden", 1);
 				}
-			} else {
-				// Hide AI section and evaluation fields when AI Copilot is disabled
-				frm.set_df_property("ai_section", "hidden", 1);
-				frm.set_df_property("ai_score", "hidden", 1);
-				frm.set_df_property("ai_review_status", "hidden", 1);
-				frm.set_df_property("ai_copilot_feedback", "hidden", 1);
-				frm.set_df_property("ai_reviews", "hidden", 1);
+
+				// Filter workflow actions based on Copilot enable switch
+				const is_lead = frappe.user.has_role("Marketing Lead") || frappe.user.has_role("System Manager") || frappe.session.user === "Administrator";
+				setTimeout(() => {
+					if (enable_ai) {
+						if (!is_lead && ["Briefed", "In Progress", "In Revision"].includes(frm.doc.workflow_state)) {
+							frm.page.clear_action_item(__("Submit for Technical Review"));
+							frm.page.remove_inner_button(__("Submit for Technical Review"));
+						}
+					} else {
+						frm.page.clear_action_item(__("Submit for Copilot Review"));
+						frm.page.remove_inner_button(__("Submit for Copilot Review"));
+						frm.page.clear_action_item(__("Resubmit Draft"));
+						frm.page.remove_inner_button(__("Resubmit Draft"));
+						frm.page.clear_action_item(__("Approve AI Copilot"));
+						frm.page.remove_inner_button(__("Approve AI Copilot"));
+					}
+				}, 300);
 			}
 		});
 
@@ -64,7 +86,7 @@ frappe.ui.form.on("Content Item", {
 				"title", "content_type", "topic", "practice_area",
 				"content_calendar", "planned_publish_date", "assigned_to",
 				"reviewer_technical", "published_url",
-				"sharepoint_folder_url", "risk_flag"
+				"sharepoint_folder_url", "risk_flag", "sla_due_date"
 			];
 			metadata_fields.forEach(field => frm.set_df_property(field, "read_only", 1));
 

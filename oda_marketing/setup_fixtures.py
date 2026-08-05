@@ -205,6 +205,9 @@ EVALUATION GUIDELINES FOR THIS DELIVERABLE:
 2. Award high passing scores (85%–98%) for complete, well-written, publishable enterprise content.
 3. Passing threshold is 80%."""
 
+	if settings.default_content_calendar and not frappe.db.exists("Content Calendar", settings.default_content_calendar):
+		settings.default_content_calendar = None
+
 	settings.save(ignore_permissions=True)
 	print("Initialized Marketing Settings with production defaults (Switches: 0, SLA Lead Days: 14).")
 
@@ -290,11 +293,9 @@ def setup_workflow():
 		{"state": "In Revision", "action": "Submit for Technical Review", "next_state": "In Review - Technical", "allowed": "Marketing Lead"},
 		{"state": "In Revision", "action": "Submit for Technical Review", "next_state": "In Review - Technical", "allowed": "System Manager"},
 
-		{"state": "Marketing Copilot Review", "action": "Approve AI Copilot", "next_state": "In Review - Technical", "allowed": "Content Writer"},
 		{"state": "Marketing Copilot Review", "action": "Approve AI Copilot", "next_state": "In Review - Technical", "allowed": "Marketing Lead"},
 		{"state": "Marketing Copilot Review", "action": "Approve AI Copilot", "next_state": "In Review - Technical", "allowed": "System Manager"},
 
-		{"state": "Marketing Copilot Review", "action": "Request Changes", "next_state": "In Revision", "allowed": "Content Writer"},
 		{"state": "Marketing Copilot Review", "action": "Request Changes", "next_state": "In Revision", "allowed": "Marketing Lead"},
 		{"state": "Marketing Copilot Review", "action": "Request Changes", "next_state": "In Revision", "allowed": "System Manager"},
 
@@ -420,8 +421,7 @@ def seed_demo_data():
 
 def setup_workspace_sidebar():
 	sidebar_name = "ODA Marketing"
-	if frappe.db.exists("Workspace Sidebar", sidebar_name):
-		frappe.delete_doc("Workspace Sidebar", sidebar_name, force=True, ignore_permissions=True)
+	frappe.db.delete("Workspace Sidebar", {"title": sidebar_name})
 
 	items = [
 		{

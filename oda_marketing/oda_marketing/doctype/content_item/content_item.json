@@ -14,26 +14,26 @@
   "column_break_1",
   "content_calendar",
   "planned_publish_date",
+  "sla_due_date",
+  "risk_flag",
   "assigned_to",
   "reviewer_technical",
+  "published_url",
+  "sharepoint_folder_url",
   "content_section",
   "content_file_1",
   "content_file_2",
   "content_file_3",
+  "notes_section",
   "notes",
+  "feedback_section",
+  "revision_feedback_notes",
   "ai_section",
   "ai_score",
   "ai_review_status",
   "ai_copilot_feedback",
   "ai_generated_prompt",
-  "ai_reviews",
-  "column_break_2",
-  "sla_due_date",
-  "risk_flag",
-  "published_url",
-  "sharepoint_folder_url",
-  "feedback_section",
-  "revision_feedback_notes"
+  "ai_reviews"
  ],
  "fields": [
   {
@@ -150,7 +150,7 @@
    "fieldtype": "Date",
    "in_list_view": 1,
    "label": "SLA Due Date",
-   "read_only": 0
+   "read_only": 1
   },
   {
    "default": "On track",
@@ -232,7 +232,8 @@
    "fieldname": "ai_reviews",
    "fieldtype": "Table",
    "label": "AI Copilot Review Audit History",
-   "options": "Content Item AI Review"
+   "options": "Content Item AI Review",
+   "read_only": 1
   }
  ],
  "icon": "tickets",
@@ -309,6 +310,10 @@
   {
    "color": "Orange",
    "title": "In Progress"
+  },
+  {
+   "color": "Purple",
+   "title": "Marketing Copilot Review"
   },
   {
    "color": "Yellow",

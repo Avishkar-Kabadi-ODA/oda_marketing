@@ -7,20 +7,33 @@ from oda_marketing.oda_marketing.ai_engine.prompt_subagent import generate_dynam
 from oda_marketing.oda_marketing.ai_engine.evaluator_agent import evaluate_content_item, publish_stream_event
 
 
-def run_ai_review(docname):
+def run_ai_review(docname, reviewer_instructions=None):
 	"""
 	Background job orchestrator (frappe.enqueue):
-	1. Invokes Subagent to generate dynamic system prompt.
-	2. Invokes Primary Evaluator Agent to score the deliverable.
-	3. Updates Content Item fields and executes gatekeeper status transition.
+	1. Checks usage limit (max_copilot_reviews_per_item).
+	2. Invokes Subagent to generate dynamic system prompt.
+	3. Invokes Primary Evaluator Agent to score the deliverable.
+	4. Updates Content Item fields and records audit entry.
+	Note: Does NOT auto-transition workflow state — score is informational only.
 	"""
 	if not frappe.db.exists("Content Item", docname):
 		return
 
+	doc = frappe.get_doc("Content Item", docname)
+
+	# Check usage limit before starting review
+	settings = frappe.get_single("Marketing Settings")
+	max_reviews = int(getattr(settings, "max_copilot_reviews_per_item", 3) or 3)
+	current_count = len(doc.ai_reviews or [])
+	if current_count >= max_reviews:
+		frappe.throw(
+			_("Copilot review limit reached ({0}/{1}). No additional AI reviews can be triggered for this item.").format(current_count, max_reviews),
+			frappe.ValidationError
+		)
+
 	frappe.flags.in_ai_copilot_review = True
 
 	try:
-		doc = frappe.get_doc("Content Item", docname)
 
 		# Mark status as In Progress
 		doc.db_set("ai_review_status", "In Progress", update_modified=False)
@@ -29,18 +42,17 @@ def run_ai_review(docname):
 		publish_stream_event(docname, assigned_user, "Stage 1: Triggering Prompt Generator Subagent...", progress=10)
 
 		# Stage 1: Generate dynamic system prompt via Subagent
-		dynamic_prompt = generate_dynamic_system_prompt(doc)
+		dynamic_prompt = generate_dynamic_system_prompt(doc, reviewer_instructions=reviewer_instructions)
 		doc.db_set("ai_generated_prompt", dynamic_prompt, update_modified=False)
 
 		publish_stream_event(docname, assigned_user, "Stage 2: Evaluating content with dynamic system prompt...", progress=30)
 
 		# Stage 2: Evaluate document via Primary Agent
-		eval_res = evaluate_content_item(doc, dynamic_prompt, user_email=assigned_user)
+		eval_res = evaluate_content_item(doc, dynamic_prompt, user_email=assigned_user, reviewer_instructions=reviewer_instructions)
 
 		score = int(eval_res.get("overall_score", 0))
 		feedback = eval_res.get("ai_copilot_feedback", "")
 
-		settings = frappe.get_single("Marketing Settings")
 		passing_score = int(getattr(settings, "ai_copilot_passing_score", 80) or 80)
 
 		# Update AI fields on Content Item
@@ -59,38 +71,23 @@ def run_ai_review(docname):
 			"system_prompt": dynamic_prompt
 		})
 
-		# Stage 3: Gatekeeper Decision Branching (Configurable Threshold)
-		target_state = "In Revision" if score < passing_score else "In Review - Technical"
-		if target_state == "In Revision" and feedback:
-			doc.revision_feedback_notes = f"AI Copilot Review Feedback (Score: {score}%):\n" + feedback
-
 		publish_stream_event(
 			docname, assigned_user,
-			f"AI Score ({score}%) threshold check ({passing_score}%). Moving to '{target_state}'.",
+			f"AI Score: {score}% (threshold: {passing_score}%). Review complete — score is informational.",
 			progress=100
 		)
 
-		doc.flags.previous_workflow_state = doc.workflow_state
-		doc.workflow_state = target_state
-		doc.status = target_state
-
 		doc.db_set({
-			"workflow_state": target_state,
-			"status": target_state,
 			"ai_score": score,
 			"ai_review_status": "Completed",
 			"ai_generated_prompt": dynamic_prompt,
 			"ai_copilot_feedback": feedback,
-			"revision_feedback_notes": doc.revision_feedback_notes if target_state == "In Revision" else doc.get("revision_feedback_notes")
 		}, update_modified=False)
 
 		doc.flags.ignore_permissions = True
 		doc.flags.ignore_workflow = True
 		doc.flags.ignore_validate = True
 		doc.save(ignore_permissions=True)
-
-		doc.trigger_workflow_notifications()
-		doc.trigger_system_notifications()
 
 		# Send email notification to writer when AI score fails threshold
 		if score < passing_score:
@@ -121,7 +118,7 @@ def notify_writer_copilot_failed(doc, score, feedback):
 		message = f"""<p>Hello <b>{doc.get_user_full_name(doc.assigned_to)}</b>,</p>
 <p>Your content deliverable <b>{doc.title}</b> has been evaluated by the <b>Marketing Copilot Agent</b>.</p>
 <p><b>AI Quality Score:</b> <span style="color: #dc2626; font-weight: bold;">{score}%</span></p>
-<p>The deliverable has been moved to <b>In Revision</b> status. Please review the AI Copilot Feedback below, update your content draft, and resubmit.</p>
+<p>The AI Copilot recommends revisions. Please review the feedback below, update your content draft, and resubmit when ready.</p>
 <div style="background-color: #f8fafc; border-left: 4px solid #3b82f6; padding: 15px; margin: 15px 0;">
   {feedback}
 </div>

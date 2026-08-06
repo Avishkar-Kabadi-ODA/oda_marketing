@@ -22,6 +22,33 @@ def setup_roles():
 			print(f"Created Role: {r['role_name']}")
 
 
+def setup_content_item_options():
+	"""Create default Content Item Option records for Format and Practice Area."""
+	format_options = ["Blog", "Poll", "Flowchart", "Carousel"]
+	practice_area_options = ["HCLS", "Pharma Supply Chain", "Fintech", "Agriculture", "Cross-domain"]
+
+	for idx, label in enumerate(format_options):
+		if not frappe.db.exists("Content Item Option", label):
+			frappe.get_doc({
+				"doctype": "Content Item Option",
+				"option_type": "Format",
+				"option_label": label,
+				"is_active": 1,
+				"sort_order": idx
+			}).insert(ignore_permissions=True)
+			print(f"Created Content Item Option: Format - {label}")
+
+	for idx, label in enumerate(practice_area_options):
+		if not frappe.db.exists("Content Item Option", label):
+			frappe.get_doc({
+				"doctype": "Content Item Option",
+				"option_type": "Practice Area",
+				"option_label": label,
+				"is_active": 1,
+				"sort_order": idx
+			}).insert(ignore_permissions=True)
+			print(f"Created Content Item Option: Practice Area - {label}")
+
 
 def setup_email_templates_and_settings():
 	templates = [
@@ -30,7 +57,7 @@ def setup_email_templates_and_settings():
 			"subject": "[TASK NOTIFICATION] Deliverable '{{ doc.title }}' Status: {{ doc.workflow_state }}",
 			"response": """<p>Hello <b>{{ assigned_to_name }}</b>,</p>
 {% if doc.workflow_state == "Briefed" %}
-  <p>You have been assigned to create the content deliverable <b>{{ doc.title }}</b> (Type: {{ doc.content_type }}). Task details have been issued for your review.</p>
+  <p>You have been assigned to create the content deliverable <b>{{ doc.title }}</b> (Format: {{ doc.content_type }}). Task details have been issued for your review.</p>
   <p><b>Planned Publish Date:</b> {{ doc.planned_publish_date }}</p>
   <p>Please log into the portal, review the task details, and proceed with drafting.</p>
 {% elif doc.workflow_state == "In Revision" %}
@@ -55,12 +82,12 @@ def setup_email_templates_and_settings():
 			"name": "Marketing Reviewer Notification",
 			"subject": "[REVIEW NOTIFICATION] {{ doc.workflow_state }} for '{{ doc.title }}'",
 			"response": """<p>Hello <b>{{ reviewer_technical_name }}</b>,</p>
-<p>Content deliverable <b>{{ doc.title }}</b> (Type: {{ doc.content_type }}) requires your signoff for status: <b>{{ doc.workflow_state }}</b>.</p>
+<p>Content deliverable <b>{{ doc.title }}</b> (Format: {{ doc.content_type }}) requires your signoff for status: <b>{{ doc.workflow_state }}</b>.</p>
 <ul>
   <li><b>Assigned Writer:</b> {{ assigned_to_name }}</li>
   <li><b>Created By:</b> {{ creator_name }}</li>
-  <li><b>Technical Reviewer:</b> {{ reviewer_technical_name }}</li>
-  <li><b>SLA Due Date:</b> {{ doc.sla_due_date }}</li>
+  <li><b>Reviewer:</b> {{ reviewer_technical_name }}</li>
+  <li><b>Due Date:</b> {{ doc.sla_due_date }}</li>
   {% if content_file_1_link %}
     <li><b>Primary Content Draft:</b> {{ content_file_1_link }}</li>
   {% endif %}
@@ -79,7 +106,7 @@ def setup_email_templates_and_settings():
 			"name": "Marketing Publisher Notification",
 			"subject": "[PUBLISHING NOTIFICATION] Deliverable '{{ doc.title }}' Status: Approved for Publishing",
 			"response": """<p>Hello <b>{{ publisher_name }}</b>,</p>
-<p>Great news! The deliverable <b>{{ doc.title }}</b> has passed technical review by <b>{{ reviewer_technical_name }}</b> and is marked <b>Approved</b> for final publishing.</p>
+<p>Great news! The deliverable <b>{{ doc.title }}</b> has passed review by <b>{{ reviewer_technical_name }}</b> and is marked <b>Approved</b> for final publishing.</p>
 <ul>
   <li><b>Assigned Writer:</b> {{ assigned_to_name }}</li>
   <li><b>Created By:</b> {{ creator_name }}</li>
@@ -112,9 +139,9 @@ def setup_email_templates_and_settings():
 		},
 		{
 			"name": "Marketing Overdue SLA Alert",
-			"subject": "[OVERDUE ALERT] Deliverable '{{ doc.title }}' Exceeded SLA Date",
+			"subject": "[OVERDUE ALERT] Deliverable '{{ doc.title }}' Exceeded Due Date",
 			"response": """<p style='color: #dc2626; font-weight: bold;'>URGENT ESCALATION ALERT</p>
-<p>Content deliverable <b>{{ doc.title }}</b> (Planned Publish Date: {{ doc.planned_publish_date }}) has passed its SLA Due Date ({{ doc.sla_due_date }}).</p>
+<p>Content deliverable <b>{{ doc.title }}</b> (Planned Publish Date: {{ doc.planned_publish_date }}) has passed its Due Date ({{ doc.sla_due_date }}).</p>
 {% if content_file_1_link %}
   <p><b>Primary Content Draft:</b> {{ content_file_1_link }}</p>
 {% endif %}
@@ -150,6 +177,9 @@ def setup_email_templates_and_settings():
 	settings.default_sla_lead_days = 14
 	settings.ai_copilot_passing_score = 80
 	settings.ai_provider = "APIM Gateway"
+	settings.max_copilot_reviews_per_item = 3
+	settings.sla_reminder_enabled = 0
+	settings.sla_reminder_days_before = 3
 	settings.writer_email_template = "Marketing Writer Notification"
 	settings.reviewer_email_template = "Marketing Reviewer Notification"
 	settings.publisher_email_template = "Marketing Publisher Notification"
@@ -193,7 +223,7 @@ EVALUATION GUIDELINES FOR THIS DELIVERABLE:
 def setup_workflow_states_and_actions():
 	state_names = [
 		"Planned", "Briefed", "In Progress", "Marketing Copilot Review",
-		"In Review - Technical", "In Revision", "Approved", "Published"
+		"In Review", "In Revision", "Approved", "Published"
 	]
 	for state in state_names:
 		if not frappe.db.exists("Workflow State", state):
@@ -205,9 +235,9 @@ def setup_workflow_states_and_actions():
 			print(f"Created Workflow State: {state}")
 
 	action_names = [
-		"Issue Brief", "Accept Brief", "Submit for Copilot Review",
-		"Submit for Technical Review", "Approve AI Copilot", "Request Changes",
-		"Approve Technical", "Resubmit Draft", "Publish"
+		"Issue Brief", "Start Work", "Submit for Review",
+		"Run Copilot Review", "Request Changes",
+		"Approve", "Resubmit Draft", "Publish"
 	]
 	for action in action_names:
 		if not frappe.db.exists("Workflow Action Master", action):
@@ -228,65 +258,56 @@ def setup_workflow():
 
 	states = [
 		{"state": "Planned", "doc_status": "0", "allow_edit": "Marketing Lead", "style": "Primary"},
-		{"state": "Briefed", "doc_status": "0", "allow_edit": "Content Writer", "style": "Info"},
+		{"state": "Briefed", "doc_status": "0", "allow_edit": "Marketing Lead", "style": "Info"},
 		{"state": "In Progress", "doc_status": "0", "allow_edit": "Content Writer", "style": "Warning"},
 		{"state": "Marketing Copilot Review", "doc_status": "0", "allow_edit": "Content Writer", "style": "Info"},
-		{"state": "In Review - Technical", "doc_status": "0", "allow_edit": "Technical Reviewer", "style": "Warning"},
+		{"state": "In Review", "doc_status": "0", "allow_edit": "Technical Reviewer", "style": "Warning"},
 		{"state": "In Revision", "doc_status": "0", "allow_edit": "Content Writer", "style": "Danger"},
 		{"state": "Approved", "doc_status": "0", "allow_edit": "Marketing Lead", "style": "Success"},
 		{"state": "Published", "doc_status": "0", "allow_edit": "Marketing Lead", "style": "Success"},
 	]
 
 	transitions = [
+		# Planned -> Briefed
 		{"state": "Planned", "action": "Issue Brief", "next_state": "Briefed", "allowed": "Marketing Lead"},
 		{"state": "Planned", "action": "Issue Brief", "next_state": "Briefed", "allowed": "System Manager"},
 
-		{"state": "Briefed", "action": "Accept Brief", "next_state": "In Progress", "allowed": "Content Writer"},
-		{"state": "Briefed", "action": "Accept Brief", "next_state": "In Progress", "allowed": "Marketing Lead"},
-		{"state": "Briefed", "action": "Accept Brief", "next_state": "In Progress", "allowed": "System Manager"},
+		# Briefed -> In Progress (writer starts work, stamps brief_accepted_on)
+		{"state": "Briefed", "action": "Start Work", "next_state": "In Progress", "allowed": "Content Writer"},
+		{"state": "Briefed", "action": "Start Work", "next_state": "In Progress", "allowed": "Marketing Lead"},
+		{"state": "Briefed", "action": "Start Work", "next_state": "In Progress", "allowed": "System Manager"},
 
-		# AI Copilot workflow branch
-		{"state": "Briefed", "action": "Submit for Copilot Review", "next_state": "Marketing Copilot Review", "allowed": "Content Writer"},
-		{"state": "Briefed", "action": "Submit for Copilot Review", "next_state": "Marketing Copilot Review", "allowed": "Marketing Lead"},
-		{"state": "Briefed", "action": "Submit for Copilot Review", "next_state": "Marketing Copilot Review", "allowed": "System Manager"},
+		# In Progress -> In Review (direct human review)
+		{"state": "In Progress", "action": "Submit for Review", "next_state": "In Review", "allowed": "Content Writer"},
+		{"state": "In Progress", "action": "Submit for Review", "next_state": "In Review", "allowed": "Marketing Lead"},
+		{"state": "In Progress", "action": "Submit for Review", "next_state": "In Review", "allowed": "System Manager"},
 
-		{"state": "In Progress", "action": "Submit for Copilot Review", "next_state": "Marketing Copilot Review", "allowed": "Content Writer"},
-		{"state": "In Progress", "action": "Submit for Copilot Review", "next_state": "Marketing Copilot Review", "allowed": "Marketing Lead"},
-		{"state": "In Progress", "action": "Submit for Copilot Review", "next_state": "Marketing Copilot Review", "allowed": "System Manager"},
+		# In Progress -> Marketing Copilot Review (optional AI review path)
+		{"state": "In Progress", "action": "Run Copilot Review", "next_state": "Marketing Copilot Review", "allowed": "Content Writer"},
+		{"state": "In Progress", "action": "Run Copilot Review", "next_state": "Marketing Copilot Review", "allowed": "Marketing Lead"},
+		{"state": "In Progress", "action": "Run Copilot Review", "next_state": "Marketing Copilot Review", "allowed": "System Manager"},
 
-		# Direct Technical Review workflow branch (Used when AI Copilot is disabled)
-		{"state": "Briefed", "action": "Submit for Technical Review", "next_state": "In Review - Technical", "allowed": "Content Writer"},
-		{"state": "Briefed", "action": "Submit for Technical Review", "next_state": "In Review - Technical", "allowed": "Marketing Lead"},
-		{"state": "Briefed", "action": "Submit for Technical Review", "next_state": "In Review - Technical", "allowed": "System Manager"},
+		# Marketing Copilot Review -> In Review (after review completes, user manually advances)
+		{"state": "Marketing Copilot Review", "action": "Submit for Review", "next_state": "In Review", "allowed": "Content Writer"},
+		{"state": "Marketing Copilot Review", "action": "Submit for Review", "next_state": "In Review", "allowed": "Marketing Lead"},
+		{"state": "Marketing Copilot Review", "action": "Submit for Review", "next_state": "In Review", "allowed": "System Manager"},
 
-		{"state": "In Progress", "action": "Submit for Technical Review", "next_state": "In Review - Technical", "allowed": "Content Writer"},
-		{"state": "In Progress", "action": "Submit for Technical Review", "next_state": "In Review - Technical", "allowed": "Marketing Lead"},
-		{"state": "In Progress", "action": "Submit for Technical Review", "next_state": "In Review - Technical", "allowed": "System Manager"},
+		# In Review -> In Revision (reviewer requests changes)
+		{"state": "In Review", "action": "Request Changes", "next_state": "In Revision", "allowed": "Technical Reviewer"},
+		{"state": "In Review", "action": "Request Changes", "next_state": "In Revision", "allowed": "Marketing Lead"},
+		{"state": "In Review", "action": "Request Changes", "next_state": "In Revision", "allowed": "System Manager"},
 
-		{"state": "In Revision", "action": "Resubmit Draft", "next_state": "Marketing Copilot Review", "allowed": "Content Writer"},
-		{"state": "In Revision", "action": "Resubmit Draft", "next_state": "Marketing Copilot Review", "allowed": "Marketing Lead"},
-		{"state": "In Revision", "action": "Resubmit Draft", "next_state": "Marketing Copilot Review", "allowed": "System Manager"},
+		# In Review -> Approved (reviewer approves)
+		{"state": "In Review", "action": "Approve", "next_state": "Approved", "allowed": "Technical Reviewer"},
+		{"state": "In Review", "action": "Approve", "next_state": "Approved", "allowed": "Marketing Lead"},
+		{"state": "In Review", "action": "Approve", "next_state": "Approved", "allowed": "System Manager"},
 
-		{"state": "In Revision", "action": "Submit for Technical Review", "next_state": "In Review - Technical", "allowed": "Content Writer"},
-		{"state": "In Revision", "action": "Submit for Technical Review", "next_state": "In Review - Technical", "allowed": "Marketing Lead"},
-		{"state": "In Revision", "action": "Submit for Technical Review", "next_state": "In Review - Technical", "allowed": "System Manager"},
+		# In Revision -> In Progress (writer resubmits, gets choice again)
+		{"state": "In Revision", "action": "Resubmit Draft", "next_state": "In Progress", "allowed": "Content Writer"},
+		{"state": "In Revision", "action": "Resubmit Draft", "next_state": "In Progress", "allowed": "Marketing Lead"},
+		{"state": "In Revision", "action": "Resubmit Draft", "next_state": "In Progress", "allowed": "System Manager"},
 
-		{"state": "Marketing Copilot Review", "action": "Approve AI Copilot", "next_state": "In Review - Technical", "allowed": "Content Writer"},
-		{"state": "Marketing Copilot Review", "action": "Approve AI Copilot", "next_state": "In Review - Technical", "allowed": "Marketing Lead"},
-		{"state": "Marketing Copilot Review", "action": "Approve AI Copilot", "next_state": "In Review - Technical", "allowed": "System Manager"},
-
-		{"state": "Marketing Copilot Review", "action": "Request Changes", "next_state": "In Revision", "allowed": "Content Writer"},
-		{"state": "Marketing Copilot Review", "action": "Request Changes", "next_state": "In Revision", "allowed": "Marketing Lead"},
-		{"state": "Marketing Copilot Review", "action": "Request Changes", "next_state": "In Revision", "allowed": "System Manager"},
-
-		{"state": "In Review - Technical", "action": "Request Changes", "next_state": "In Revision", "allowed": "Technical Reviewer"},
-		{"state": "In Review - Technical", "action": "Request Changes", "next_state": "In Revision", "allowed": "Marketing Lead"},
-		{"state": "In Review - Technical", "action": "Request Changes", "next_state": "In Revision", "allowed": "System Manager"},
-
-		{"state": "In Review - Technical", "action": "Approve Technical", "next_state": "Approved", "allowed": "Technical Reviewer"},
-		{"state": "In Review - Technical", "action": "Approve Technical", "next_state": "Approved", "allowed": "Marketing Lead"},
-		{"state": "In Review - Technical", "action": "Approve Technical", "next_state": "Approved", "allowed": "System Manager"},
-
+		# Approved -> Published
 		{"state": "Approved", "action": "Publish", "next_state": "Published", "allowed": "Marketing Lead"},
 		{"state": "Approved", "action": "Publish", "next_state": "Published", "allowed": "System Manager"},
 	]
@@ -315,7 +336,7 @@ def setup_kanban_board():
 		{"column_name": "Briefed", "status": "Active", "indicator": "Light Blue"},
 		{"column_name": "In Progress", "status": "Active", "indicator": "Orange"},
 		{"column_name": "Marketing Copilot Review", "status": "Active", "indicator": "Purple"},
-		{"column_name": "In Review - Technical", "status": "Active", "indicator": "Yellow"},
+		{"column_name": "In Review", "status": "Active", "indicator": "Yellow"},
 		{"column_name": "In Revision", "status": "Active", "indicator": "Red"},
 		{"column_name": "Approved", "status": "Active", "indicator": "Cyan"},
 		{"column_name": "Published", "status": "Active", "indicator": "Green"},
@@ -367,6 +388,14 @@ def setup_workspace_sidebar():
 			"link_to": "Content Calendar",
 			"label": "Content Calendar",
 			"icon": "calendar",
+			"child": 0,
+		},
+		{
+			"type": "Link",
+			"link_type": "DocType",
+			"link_to": "Content Item Option",
+			"label": "Content Item Options",
+			"icon": "tag",
 			"child": 0,
 		},
 		{
@@ -455,6 +484,7 @@ def setup_desktop_icon():
 
 def run_setup():
 	setup_roles()
+	setup_content_item_options()
 	setup_email_templates_and_settings()
 	setup_workflow()
 	setup_kanban_board()

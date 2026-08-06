@@ -77,23 +77,22 @@ class TestContentCalendar(FrappeTestCase):
 		item.reload()
 		self.assertEqual(item.workflow_state, "Briefed")
 
-		# Accept Brief -> In Progress
+		# Start Work -> In Progress (renamed from "Accept Brief")
 		frappe.set_user("writer.test@oda.local")
-		apply_workflow(item, "Accept Brief")
+		apply_workflow(item, "Start Work")
 		item.reload()
 		self.assertEqual(item.workflow_state, "In Progress")
 
-		# Submit for Technical Review
+		# Submit for Review (renamed from "Submit for Technical Review")
 		item.content_file_1 = "/files/sample_draft.txt"
-		item.ai_score = 92
-		item.ai_review_status = "Completed"
 		item.save()
-		apply_workflow(item, "Submit for Technical Review")
+		apply_workflow(item, "Submit for Review")
 		item.reload()
-		self.assertEqual(item.workflow_state, "In Review - Technical")
+		self.assertEqual(item.workflow_state, "In Review")
 
-		# Approve Technical -> Approved
+		# Approve -> Approved (renamed from "Approve Technical")
 		frappe.set_user("Avishkar.Kabadi@optimumdataanalytics.com")
-		apply_workflow(item, "Approve Technical")
+		apply_workflow(item, "Approve")
 		item.reload()
 		self.assertEqual(item.workflow_state, "Approved")
+

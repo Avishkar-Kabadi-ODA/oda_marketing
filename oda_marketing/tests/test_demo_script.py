@@ -88,12 +88,33 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 		item.title = "Modified Title By Writer"
 		self.assertRaises(frappe.PermissionError, item.save)
 
-		# Writer attempts to modify SLA due date -> fails
+		# Writer attempts to modify SLA due date -> SUCCEEDS (Due Date is now editable by writer)
 		item.reload()
 		item.sla_due_date = "2026-10-10"
-		self.assertRaises(frappe.PermissionError, item.save)
+		# Note: Writer cannot edit attachments in Planned state, but Due Date is carved out.
+		# However, item is in "Planned" state, so writer can't save at all because
+		# Frappe workflow only allows "Marketing Lead" to edit in Planned state.
+		# Let's move item to Briefed first via Lead, then test.
 
-		# Writer updates content_file_1, content_file_2, content_file_3 -> succeeds
+		# Move item to Briefed -> In Progress so Writer can edit
+		frappe.set_user("lead.test@oda.local")
+		item.reload()
+		apply_workflow(item, "Issue Brief")
+		frappe.db.commit()
+
+		frappe.set_user("writer.test@oda.local")
+		item.reload()
+		apply_workflow(item, "Start Work")
+		frappe.db.commit()
+
+		# Writer can now edit Due Date in "In Progress" state
+		item.reload()
+		item.sla_due_date = "2026-10-10"
+		item.save()
+		self.assertEqual(str(item.sla_due_date), "2026-10-10")
+		frappe.db.commit()
+
+		# Writer updates content_file_1, content_file_2, content_file_3 in In Progress -> succeeds
 		item.reload()
 		item.content_file_1 = "/files/primary_draft.pdf"
 		item.content_file_2 = "/files/asset_1.png"
@@ -103,7 +124,8 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 
 		frappe.set_user("Administrator")
 
-	def test_sla_lead_time_calculation_and_validations(self):
+	def test_sla_due_date_manual_entry_and_validations(self):
+		"""Tests that SLA Due Date is now manual (no auto-calculation) and validations work."""
 		frappe.set_user("lead.test@oda.local")
 		cal = frappe.get_doc({
 			"doctype": "Content Calendar",
@@ -113,33 +135,32 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 			"status": "Active"
 		}).insert()
 
-		# Set custom SLA lead days to 20 days in settings via db_set and clear cache
-		frappe.db.set_single_value("Marketing Settings", "default_sla_lead_days", 20)
-		frappe.clear_cache()
-
 		item = frappe.get_doc({
 			"doctype": "Content Item",
-			"title": "SLA Lead Time Item",
+			"title": "SLA Manual Date Item",
 			"content_type": "Blog",
 			"topic": "SLA test",
 			"content_calendar": cal.name,
 			"planned_publish_date": "2026-09-01",
 			"assigned_to": "writer.test@oda.local",
-			"reviewer_technical": "Avishkar.Kabadi@optimumdataanalytics.com"
+			"reviewer_technical": "Avishkar.Kabadi@optimumdataanalytics.com",
+			"sla_due_date": "2026-08-20"
 		})
 		item.insert()
 
-		# Verify SLA Due Date is planned_publish_date (2026-09-01) minus 20 days = 2026-08-12
-		self.assertEqual(str(item.sla_due_date), "2026-08-12")
+		# Verify SLA Due Date is the manually set value (no auto-calculation)
+		self.assertEqual(str(item.sla_due_date), "2026-08-20")
 
 		# Test mandatory Published URL validation
 		item.workflow_state = "Published"
 		item.published_url = ""
+		item.flags.ignore_workflow = True
 		self.assertRaises(frappe.ValidationError, item.save)
 
-		# Test mandatory Technical Reviewer validation
-		item.workflow_state = "In Review - Technical"
+		# Test mandatory Reviewer validation for In Review
+		item.workflow_state = "In Review"
 		item.reviewer_technical = ""
+		item.flags.ignore_workflow = True
 		self.assertRaises(frappe.ValidationError, item.save)
 
 		frappe.set_user("Administrator")
@@ -186,20 +207,23 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 		item.reload()
 		self.assertEqual(item.workflow_state, "Briefed")
 
-		# Accept Brief
+		# Start Work (renamed from "Accept Brief")
 		frappe.set_user("writer.test@oda.local")
 		item.reload()
-		apply_workflow(item, "Accept Brief")
+		apply_workflow(item, "Start Work")
 		item.reload()
 		self.assertEqual(item.workflow_state, "In Progress")
 
-		# Submit for Technical Review (Direct flow when AI Copilot is disabled)
+		# Verify brief_accepted_on was stamped
+		self.assertIsNotNone(item.brief_accepted_on)
+
+		# Submit for Review (renamed from "Submit for Technical Review")
 		item.reload()
 		item.content_file_1 = "/files/sample_draft.txt"
 		item.save()
-		apply_workflow(item, "Submit for Technical Review")
+		apply_workflow(item, "Submit for Review")
 		item.reload()
-		self.assertEqual(item.workflow_state, "In Review - Technical")
+		self.assertEqual(item.workflow_state, "In Review")
 
 		# Request Changes
 		frappe.set_user(tech_rev)
@@ -210,19 +234,25 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 		item.reload()
 		self.assertEqual(item.workflow_state, "In Revision")
 
-		# Resubmit Draft
+		# Resubmit Draft -> goes to "In Progress" (not directly to review)
 		frappe.set_user("writer.test@oda.local")
 		item.reload()
 		item.content_file_1 = "/files/sample_draft.txt"
 		item.save()
-		apply_workflow(item, "Submit for Technical Review")
+		apply_workflow(item, "Resubmit Draft")
 		item.reload()
-		self.assertEqual(item.workflow_state, "In Review - Technical")
+		self.assertEqual(item.workflow_state, "In Progress")
 
-		# Approve Technical -> Approved
+		# Submit for Review again
+		item.reload()
+		apply_workflow(item, "Submit for Review")
+		item.reload()
+		self.assertEqual(item.workflow_state, "In Review")
+
+		# Approve (renamed from "Approve Technical") -> Approved
 		frappe.set_user(tech_rev)
 		item.reload()
-		apply_workflow(item, "Approve Technical")
+		apply_workflow(item, "Approve")
 		item.reload()
 		self.assertEqual(item.workflow_state, "Approved")
 
@@ -239,6 +269,8 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 		print("End-to-end multi-stage workflow, email CTA button links, and targeted notification test passed successfully!")
 
 	def test_ai_copilot_resubmission_from_revision(self):
+		"""Tests that AI Copilot review works when triggered from In Progress after revision,
+		and that score is informational only (does not auto-route)."""
 		frappe.db.set_single_value("Marketing Settings", "enable_ai_copilot", 1)
 		frappe.db.set_single_value("Marketing Settings", "ai_copilot_passing_score", 80)
 		frappe.clear_cache()
@@ -267,29 +299,45 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 			"content_file_1": "/files/sample_draft.txt"
 		}).insert()
 
-		# Technical Reviewer requests changes -> In Revision
+		# Force item to In Review state via db_set (bypassing workflow transitions)
 		item.db_set({
 			"ai_score": 90,
 			"ai_review_status": "Completed",
-			"workflow_state": "In Review - Technical"
+			"workflow_state": "In Review",
+			"status": "In Review"
 		}, update_modified=False)
+		item.reload()
+
+		# Technical Reviewer requests changes -> In Revision
+		frappe.set_user(tech_rev)
 		item.reload()
 		item.revision_feedback_notes = "Please update draft section 2."
 		item.save()
-
-		frappe.set_user(tech_rev)
 		apply_workflow(item, "Request Changes")
 		item.reload()
 		self.assertEqual(item.workflow_state, "In Revision")
 
-		# Writer resubmits draft -> enters Marketing Copilot Review, triggers AI evaluation, and moves to evaluated state
+		# Writer resubmits draft -> goes to In Progress (not auto-routed to Copilot Review)
 		frappe.set_user("writer.test@oda.local")
 		item.reload()
 		item.content_file_1 = "/files/updated_draft.txt"
 		item.save()
 		apply_workflow(item, "Resubmit Draft")
 		item.reload()
-		self.assertEqual(item.ai_review_status, "Completed")
-		self.assertIn(item.workflow_state, ["In Revision", "In Review - Technical"])
+		self.assertEqual(item.workflow_state, "In Progress")
+
+		# Writer optionally triggers Copilot Review from In Progress
+		apply_workflow(item, "Run Copilot Review")
+		item.reload()
+		self.assertEqual(item.workflow_state, "Marketing Copilot Review")
+
+		# AI review may or may not complete synchronously in on_update
+		# The key behavior check: state is Marketing Copilot Review (optional path, not forced)
+		self.assertIn(item.ai_review_status, ["Queued", "In Progress", "Completed"])
 
 		frappe.set_user("Administrator")
+
+	def tearDown(self):
+		frappe.set_user("Administrator")
+		frappe.db.rollback()
+

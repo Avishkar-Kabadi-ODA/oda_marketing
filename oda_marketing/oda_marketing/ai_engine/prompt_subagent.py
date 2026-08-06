@@ -29,10 +29,11 @@ Return raw System Prompt text only.
 """
 
 
-def generate_dynamic_system_prompt(doc):
+def generate_dynamic_system_prompt(doc, reviewer_instructions=None):
 	"""
 	Subagent execution: Analyzes Content Item metadata and returns a dynamic, custom System Prompt for evaluation.
 	Uses customizable subagent_meta_prompt from Marketing Settings if configured.
+	Optionally incorporates reviewer-specific instructions when triggered by a Reviewer.
 	"""
 	title = getattr(doc, "title", "Untitled Marketing Deliverable")
 	content_type = getattr(doc, "content_type", "Blog")
@@ -62,9 +63,13 @@ def generate_dynamic_system_prompt(doc):
 			practice_area=practice_area
 		)
 
+	# Append reviewer instructions to meta prompt if provided
+	if reviewer_instructions and reviewer_instructions.strip():
+		meta_prompt += f"\n\nADDITIONAL REVIEWER INSTRUCTIONS:\n{reviewer_instructions.strip()}"
+
 	# If no live API key is configured or mock provider, return structured dynamic template fallback
 	if provider == "Mock Agent" or not llm_cfg.get("api_key") or llm_cfg.get("api_key") == "mock-key":
-		return build_fallback_dynamic_prompt(title, content_type, topic, practice_area)
+		return build_fallback_dynamic_prompt(title, content_type, topic, practice_area, reviewer_instructions=reviewer_instructions)
 
 	try:
 		if provider in ["APIM Gateway", "OpenAI"]:
@@ -108,12 +113,13 @@ def generate_dynamic_system_prompt(doc):
 		frappe.log_error(f"Subagent prompt generation API call failed: {str(e)}")
 
 	# Fallback to local prompt builder
-	return build_fallback_dynamic_prompt(title, content_type, topic, practice_area)
+	return build_fallback_dynamic_prompt(title, content_type, topic, practice_area, reviewer_instructions=reviewer_instructions)
 
 
-def build_fallback_dynamic_prompt(title, content_type, topic, practice_area):
+def build_fallback_dynamic_prompt(title, content_type, topic, practice_area, reviewer_instructions=None):
 	"""
 	Generates a dynamic system prompt using Marketing Settings evaluator_default_prompt if configured.
+	Optionally appends reviewer-specific instructions.
 	"""
 	settings = frappe.get_single("Marketing Settings")
 	tmpl = getattr(settings, "evaluator_default_prompt", None)
@@ -125,7 +131,10 @@ def build_fallback_dynamic_prompt(title, content_type, topic, practice_area):
 				topic=topic,
 				practice_area=practice_area
 			)
-			return base_prompt + """
+			reviewer_section = ""
+			if reviewer_instructions and reviewer_instructions.strip():
+				reviewer_section = f"\n\nADDITIONAL REVIEWER INSTRUCTIONS:\n{reviewer_instructions.strip()}"
+			return base_prompt + reviewer_section + """
 
 You must respond in valid JSON with:
 {

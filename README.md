@@ -6,20 +6,26 @@
 
 ## Key Features
 
-- **Content Delivery Pipeline**: Lifecycle management for Blogs, Polls, Flowcharts, and Carousels.
-- **Workflow State Machine**: Streamlined status transitions (`Planned` → `Briefed` → `In Progress` → `Marketing Copilot Review` / `In Review - Technical` → `In Revision` → `Approved` → `Published`).
-- **Configurable SLA Engine**: Single master **Default SLA Lead Time (Days)** setting (`default_sla_lead_days`, default: `14` days) dynamically computing `sla_due_date = planned_publish_date - default_sla_lead_days`.
-- **AI Copilot Gatekeeper & Subagent**:
-  - Configurable AI Copilot Review with dynamic prompt generator subagent.
-  - Gatekeeper score thresholding (e.g., `80%`) enforcing quality sign-off before technical review.
-  - Conditionally enabled/disabled under **Marketing Settings**. When disabled, items advance directly to Technical Review.
+- **Content Delivery Pipeline**: Lifecycle management for Blogs, Polls, Flowcharts, Carousels, and custom content formats.
+- **Dynamic Option Management (`Content Item Option`)**: Decoupled dropdown options for Format (`content_type`) and Practice Area (`practice_area`) into a dedicated setup DocType with soft-disable (`is_active`) and custom sorting (`sort_order`).
+- **Streamlined Workflow State Machine**: Simplified workflow transitions (`Planned` → `Briefed` → `In Progress` → `In Review` → `Approved` → `Published`), featuring an optional `Marketing Copilot Review` state.
+- **Informational AI Copilot Engine**:
+  - Optional AI evaluation with dynamic prompt generation subagent.
+  - Non-blocking quality scoring: AI score is purely informational and no longer blocks workflow state transitions.
+  - Reviewer-triggered Copilot reviews with custom instruction inputs.
+  - Server-side usage limits enforced via `max_copilot_reviews_per_item` setting in **Marketing Settings**.
+- **Flexible Due Date & SLA Reminder Engine**:
+  - Manually entered `sla_due_date` (**Due Date**), editable by both Marketing Leads and Content Writers.
+  - Configurable SLA reminder alerts (`sla_reminder_enabled`, `sla_reminder_days_before`) sent prior to due dates.
 - **Role-Based Access Control & Safeguards**:
   - Strict permissions for `Marketing Lead`, `Content Writer`, `Technical Reviewer`, and `System Manager`.
-  - Mandatory validation safeguards for primary draft attachment, assigned technical reviewer, revision feedback notes, and live published URL.
+  - Read-only protection for Content Writers on draft attachments and notes prior to `Briefed` state.
+  - Mandatory validation safeguards for primary draft attachment (`content_file_1`), assigned Reviewer, revision feedback notes, and live published URL.
 - **Targeted Notification Engine**:
   - HTML email notifications with direct Desk action buttons ("View Content Item in Desk").
-  - Frappe In-App Bell 🔔 notifications sent directly to assigned users.
-- **Frappe Desk & Docker Integration**: Standard `desktop.py` module registration and `frappe_docker` compatibility.
+  - Frappe In-App Bell 🔔 notifications delivered directly to assigned users.
+- **Clean Desk UI & Action Segregation**:
+  - Disambiguated action menus: calendar navigation grouped under `Navigate` to avoid duplication with Frappe workflow `Actions`.
 
 ---
 
@@ -35,7 +41,7 @@ bench --site your.site.name install-app oda_marketing
 
 ### 2. Run Production Setup
 
-Run the setup fixture to initialize roles, email templates, workflow state machine, kanban pipeline, and desktop icons:
+Run the setup fixture to initialize roles, default options, email templates, workflow state machine, kanban pipeline, workspace sidebar, and desktop icons:
 
 ```bash
 bench --site your.site.name execute oda_marketing.setup_fixtures.run_setup
@@ -54,17 +60,22 @@ Navigate to **Desk → ODA Marketing → Marketing Settings**:
 1. **Master Switches & Operational Defaults**:
    - **Enable Email Notifications**: Master toggle for email delivery (default: `0`).
    - **Enable Automatic Overdue Risk Flagging**: Toggles automatic SLA due date tracking (default: `0`).
-   - **Default SLA Lead Time (Days)**: Master SLA lead time setting in days (default: `14`, mandatory).
+   - **Default SLA Lead Time (Days)**: Lead time reference setting in days (default: `14`).
    - **Default Publisher**: Default Marketing Lead / Publisher user.
 
-2. **AI Copilot Configuration** *(visible & mandatory when Enable AI Copilot is checked)*:
-   - **Enable AI Copilot Automated Review & Gatekeeper**: Enables the AI evaluation engine and quality gatekeeper (default: `0`).
-   - **Minimum Passing Score (%)**: Quality threshold required to advance to Technical Review (default: `80`).
-   - **AI LLM Provider / Architecture**: Provider architecture (e.g. `APIM Gateway`, `OpenAI`, `Google Gemini`).
+2. **Due Date Reminder Configuration**:
+   - **Enable Due Date Reminder Notifications**: Enable upcoming SLA due date alerts.
+   - **Reminder Days Before Due Date**: Days prior to due date to send reminder alerts (default: `3`).
+
+3. **AI Copilot Configuration** *(visible & configurable when Enable AI Copilot is checked)*:
+   - **Enable AI Copilot Automated Review**: Toggles the AI evaluation engine (default: `0`).
+   - **Minimum Passing Score (%)**: Quality benchmark reference score (default: `80`).
+   - **Max Copilot Reviews per Item**: Maximum allowed AI evaluation runs per Content Item (default: `3`).
+   - **AI LLM Provider / Architecture**: Provider architecture (`APIM Gateway`, `OpenAI`, `Google Gemini`, `Anthropic`, `Custom`).
    - **API Key / Subscription Key (Env Variable)**: Select stored key from **Env Variable** DocType.
    - **APIM / Endpoint URL (Env Variable)**: Select stored endpoint from **Env Variable** DocType.
    - **Model Name**: Target model (e.g. `gpt-4o`, `gemini-1.5-pro`).
-   - **Prompt Templates**: Customizable Jinja2 subagent meta-prompt and evaluator rubric templates.
+   - **Prompt Templates**: Customizable subagent meta-prompt and evaluator rubric templates.
 
 ---
 
@@ -72,34 +83,28 @@ Navigate to **Desk → ODA Marketing → Marketing Settings**:
 
 ```
                               Planned
-                                 ↓ (Issue Brief)
+                                 │
+                                 ▼ (Issue Brief)
                               Briefed
-                                 ↓ (Accept Brief)
+                                 │
+                                 ▼ (Start Work) [stamps brief_accepted_on]
                             In Progress
                                  │
            ┌─────────────────────┴─────────────────────┐
-           ▼ (AI Copilot Enabled)                      ▼ (AI Copilot Disabled)
-Submit for Copilot Review                   Submit for Technical Review
-           │                                           │
+           ▼ (Run Copilot Review)                      ▼ (Submit for Review)
 Marketing Copilot Review                               │
-   ├── Score ≥ 80% (Pass) ──┐                          │
-   └── Score < 80% (Fail) ─┐│                          │
-                           ││                          │
-                           │└──────────────────────────┼──────────────┐
-                           │                           │              │
-                           │                           ▼              │
-                           │                 In Review - Technical    │
-                           │                           │              │
-                           │                 (Approve Technical)      │
-                           │                           │              │
-                           ▼                           ▼              │
-                      In Revision                   Approved          │
-                           │                           │              │
-                    (Resubmit Draft)               (Publish)          │
-                           │                           │              │
-                           └───────────────────────────┼──────────────┘
-                                                       ▼
-                                                   Published
+           │                                           │
+           └─────────────────────┬─────────────────────┘
+                                 │
+                                 ▼
+                             In Review
+                                 │
+           ┌─────────────────────┴─────────────────────┐
+           ▼ (Request Changes)                         ▼ (Approve)
+      In Revision                                  Approved
+           │                                           │
+           ▼ (Resubmit Draft)                          ▼ (Publish)
+      In Progress                                  Published
 ```
 
 ---

@@ -12,7 +12,7 @@ frappe.views.calendar["Content Item"] = {
 		"Briefed": "info",
 		"In Progress": "warning",
 		"Marketing Copilot Review": "info",
-		"In Review - Technical": "warning",
+		"In Review": "warning",
 		"In Revision": "danger",
 		"Approved": "success",
 		"Published": "success"
@@ -26,9 +26,9 @@ frappe.views.calendar["Content Item"] = {
 		},
 		{
 			fieldname: "content_type",
-			fieldtype: "Select",
-			options: "\nBlog\nPoll\nFlowchart\nCarousel",
-			label: __("Content Type")
+			fieldtype: "Link",
+			options: "Content Item Option",
+			label: __("Format")
 		},
 		{
 			fieldname: "assigned_to",

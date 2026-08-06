@@ -18,8 +18,8 @@
   "risk_flag",
   "assigned_to",
   "reviewer_technical",
+  "brief_accepted_on",
   "published_url",
-  "sharepoint_folder_url",
   "content_section",
   "content_file_1",
   "content_file_2",
@@ -28,6 +28,7 @@
   "notes",
   "feedback_section",
   "revision_feedback_notes",
+  "reviewer_copilot_instructions",
   "ai_section",
   "ai_score",
   "ai_review_status",
@@ -59,17 +60,18 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Status",
-   "options": "Planned\nBriefed\nIn Progress\nMarketing Copilot Review\nIn Review - Technical\nIn Revision\nApproved\nPublished",
+   "options": "Planned\nBriefed\nIn Progress\nMarketing Copilot Review\nIn Review\nIn Revision\nApproved\nPublished",
    "read_only": 1
   },
   {
    "fieldname": "content_type",
-   "fieldtype": "Select",
+   "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Content Type",
-   "options": "Blog\nPoll\nFlowchart\nCarousel",
-   "reqd": 1
+   "label": "Format",
+   "options": "Content Item Option",
+   "reqd": 1,
+   "link_filters": "[[\"Content Item Option\", \"option_type\", \"=\", \"Format\"], [\"Content Item Option\", \"is_active\", \"=\", 1]]"
   },
   {
    "fieldname": "topic",
@@ -79,10 +81,11 @@
   },
   {
    "fieldname": "practice_area",
-   "fieldtype": "Select",
+   "fieldtype": "Link",
    "in_standard_filter": 1,
    "label": "Practice Area",
-   "options": "HCLS\nPharma Supply Chain\nFintech\nAgriculture\nCross-domain"
+   "options": "Content Item Option",
+   "link_filters": "[[\"Content Item Option\", \"option_type\", \"=\", \"Practice Area\"], [\"Content Item Option\", \"is_active\", \"=\", 1]]"
   },
   {
    "fieldname": "column_break_1",
@@ -117,13 +120,13 @@
    "fieldname": "reviewer_technical",
    "fieldtype": "Link",
    "in_standard_filter": 1,
-   "label": "Technical Reviewer",
+   "label": "Reviewer",
    "options": "User"
   },
   {
    "fieldname": "content_section",
    "fieldtype": "Section Break",
-   "label": "Writer's Content Drafts & Attachments"
+   "label": "Content Drafts & Attachments"
   },
   {
    "fieldname": "content_file_1",
@@ -134,12 +137,12 @@
   {
    "fieldname": "content_file_2",
    "fieldtype": "Attach",
-   "label": "Writer's Supporting Asset 1 (Optional)"
+   "label": "Supporting Asset 1 (Optional)"
   },
   {
    "fieldname": "content_file_3",
    "fieldtype": "Attach",
-   "label": "Writer's Supporting Asset 2 (Optional)"
+   "label": "Supporting Asset 2 (Optional)"
   },
   {
    "fieldname": "column_break_2",
@@ -149,8 +152,7 @@
    "fieldname": "sla_due_date",
    "fieldtype": "Date",
    "in_list_view": 1,
-   "label": "SLA Due Date",
-   "read_only": 1
+   "label": "Due Date"
   },
   {
    "default": "On track",
@@ -158,25 +160,25 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Risk Flag / SLA Status",
+   "label": "Risk Status",
    "options": "On track\nAt risk\nLate"
   },
   {
    "fieldname": "published_url",
    "fieldtype": "Data",
-   "label": "Published Asset URL",
+   "label": "Published URL",
    "options": "URL"
   },
   {
-   "fieldname": "sharepoint_folder_url",
-   "fieldtype": "Data",
-   "label": "SharePoint Folder URL",
-   "options": "URL"
+   "fieldname": "brief_accepted_on",
+   "fieldtype": "Datetime",
+   "label": "Brief Accepted On",
+   "read_only": 1
   },
   {
    "fieldname": "feedback_section",
    "fieldtype": "Section Break",
-   "label": "Reviewer Feedback & Revisions"
+   "label": "Feedback & Revisions"
   },
   {
    "fieldname": "revision_feedback_notes",
@@ -184,9 +186,15 @@
    "label": "Revision Feedback / Notes"
   },
   {
+   "depends_on": "eval:doc.reviewer_copilot_instructions",
+   "fieldname": "reviewer_copilot_instructions",
+   "fieldtype": "Small Text",
+   "label": "Reviewer Instructions for Copilot"
+  },
+  {
    "fieldname": "notes_section",
    "fieldtype": "Section Break",
-   "label": "Notes & Working Draft Copy"
+   "label": "Working Notes"
   },
   {
    "fieldname": "notes",
@@ -196,7 +204,7 @@
   {
    "fieldname": "ai_section",
    "fieldtype": "Section Break",
-   "label": "Marketing Copilot AI Evaluation"
+   "label": "Copilot Evaluation"
   },
   {
    "fieldname": "ai_score",
@@ -225,13 +233,13 @@
    "fieldname": "ai_generated_prompt",
    "fieldtype": "Code",
    "hidden": 1,
-   "label": "System Prompt (Subagent Generated - Settings Only)",
+   "label": "Generated System Prompt",
    "read_only": 1
   },
   {
    "fieldname": "ai_reviews",
    "fieldtype": "Table",
-   "label": "AI Copilot Review Audit History",
+   "label": "Copilot Review History",
    "options": "Content Item AI Review",
    "read_only": 1
   }
@@ -239,7 +247,7 @@
  "icon": "tickets",
  "idx": 0,
  "links": [],
- "modified": "2026-08-04 20:20:00",
+ "modified": "2026-08-05 18:00:00",
  "modified_by": "Administrator",
  "module": "ODA Marketing",
  "name": "Content Item",
@@ -317,7 +325,7 @@
   },
   {
    "color": "Yellow",
-   "title": "In Review - Technical"
+   "title": "In Review"
   },
   {
    "color": "Red",

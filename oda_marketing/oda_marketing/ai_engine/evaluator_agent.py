@@ -9,15 +9,20 @@ from oda_marketing.oda_marketing.ai_engine.key_manager import get_llm_config
 from oda_marketing.oda_marketing.ai_engine.file_extractor import get_combined_draft_text
 
 
-def evaluate_content_item(doc, dynamic_system_prompt, user_email=None):
+def evaluate_content_item(doc, dynamic_system_prompt, user_email=None, reviewer_instructions=None):
 	"""
 	Primary Evaluator Agent: Uses dynamic_system_prompt + extracted draft text to score the document.
 	Streams progress updates to the user's desk UI via frappe.publish_realtime.
+	Optionally incorporates reviewer-specific instructions.
 	"""
 	docname = doc.name
 	publish_stream_event(docname, user_email, "Extracting attachment text and preparing evaluation payload...", progress=20)
 
 	draft_text = get_combined_draft_text(doc)
+
+	reviewer_section = ""
+	if reviewer_instructions and reviewer_instructions.strip():
+		reviewer_section = f"\n\nADDITIONAL REVIEWER INSTRUCTIONS:\n{reviewer_instructions.strip()}"
 
 	user_prompt = f"""
 CONTENT DELIVERABLE TO EVALUATE:
@@ -28,6 +33,7 @@ CONTENT DELIVERABLE TO EVALUATE:
 
 DRAFT CONTENT & ATTACHMENT TEXT:
 {draft_text}
+{reviewer_section}
 
 Evaluate this deliverable according to your System Prompt criteria and output valid JSON.
 """
@@ -161,16 +167,21 @@ def run_heuristic_mock_evaluation(doc, draft_text):
 			"Technical terminology needs stronger alignment with enterprise industry standards."
 		]
 
+	strengths_md = "".join([f"- {s}\n" for s in strengths])
+	flaws_list = flaws or ["Content meets enterprise technical quality criteria for submission."]
+	flaws_md = "".join([f"- {fl}\n" for fl in flaws_list])
+	flaws_header = "#### Actionable Revision Items Required:" if flaws else "#### Copilot Recommendations:"
+
 	feedback_md = f"""### AI Copilot Evaluation Summary
 - **Overall Score**: {score}%
 - **Status Verdict**: **{verdict}** (Threshold: {passing_score}%)
 - **Content Type**: {doc.content_type} | **Domain**: {doc.practice_area}
 
 #### Key Strengths:
-{"".join([f"- {s}\n" for s in strengths])}
+{strengths_md}
 
-{"#### Actionable Revision Items Required:" if flaws else "#### Copilot Recommendations:"}
-{"".join([f"- {f}\n" for f in (flaws or ["Content meets enterprise technical quality criteria for submission."])])}
+{flaws_header}
+{flaws_md}
 """
 
 	return {
@@ -206,17 +217,21 @@ def format_eval_result(res_json):
 	if isinstance(rationale, list):
 		rationale = "\n".join([str(r) for r in rationale])
 
+	strengths_md = "".join([f"- {s}\n" for s in strengths]) if strengths else "- Clear structure and strong topic alignment.\n"
+	flaws_md = "".join([f"- {fl}\n" for fl in flaws]) if flaws else "- Content meets enterprise technical quality criteria for submission.\n"
+	rationale_header = "#### Evaluator Rationale & Verdict:" if rationale else ""
+
 	feedback_text = f"""### AI Copilot Evaluation Report
 - **Overall Quality Score**: **{score}%**
 - **Verdict**: **{verdict}** (Passing Threshold: **{passing_score}%**)
 
 #### Key Strengths Identified:
-{"".join([f"- {s}\n" for s in strengths]) if strengths else "- Clear structure and strong topic alignment.\n"}
+{strengths_md}
 
 #### Recommended Improvements / Revision Items:
-{"".join([f"- {f}\n" for f in flaws]) if flaws else "- Content meets enterprise technical quality criteria for submission.\n"}
+{flaws_md}
 
-{"#### Evaluator Rationale & Verdict:" if rationale else ""}
+{rationale_header}
 {rationale}
 """
 

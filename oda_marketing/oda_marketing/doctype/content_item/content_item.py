@@ -4,38 +4,22 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import add_days, getdate, nowdate, get_url
+from frappe.utils import add_days, getdate, nowdate, now_datetime, get_url
 
 
 class ContentItem(Document):
 	def validate(self):
 		self.validate_creation_permissions()
 		self.validate_metadata_edit_permissions()
+		self.validate_writer_readonly_before_briefed()
 		self.sync_status_with_workflow()
 		self.validate_publish_date_with_calendar()
-		self.calculate_sla_due_date()
 		self.check_overdue_sla()
 		self.validate_primary_attachment_mandatory()
 		self.validate_technical_reviewer_mandatory()
 		self.validate_revision_notes()
 		self.validate_published_url_mandatory()
-		self.validate_copilot_score_gatekeeper()
-
-	def validate_copilot_score_gatekeeper(self):
-		settings = frappe.get_single("Marketing Settings")
-		if not getattr(settings, "enable_ai_copilot", 0):
-			return
-
-		if getattr(self, "workflow_state", None) == "In Review - Technical":
-			score = float(getattr(self, "ai_score", 0) or 0)
-			status = getattr(self, "ai_review_status", None)
-			passing_score = int(getattr(settings, "ai_copilot_passing_score", 80) or 80)
-
-			if score < passing_score or status != "Completed":
-				frappe.throw(
-					_("<b>Marketing Copilot Gatekeeper:</b> Content Item must pass Marketing Copilot Review with a score of {0}% or higher before submitting for Technical Review (Current Score: {1}%).").format(passing_score, score),
-					frappe.ValidationError
-				)
+		self.stamp_brief_accepted_on()
 
 	def before_insert(self):
 		if self.assigned_to:
@@ -62,46 +46,49 @@ class ContentItem(Document):
 			before = self.get_doc_before_save()
 			if not before:
 				return
+			# sla_due_date is explicitly excluded — Content Writers can edit Due Date
 			metadata_fields = [
 				"title", "content_type", "topic", "practice_area",
 				"content_calendar", "planned_publish_date", "assigned_to",
-				"reviewer_technical", "sla_due_date"
+				"reviewer_technical"
 			]
 			for field in metadata_fields:
 				val_self = getattr(self, field, None)
 				val_before = getattr(before, field, None)
 
-				if field in ["planned_publish_date", "sla_due_date"]:
+				if field in ["planned_publish_date"]:
 					if val_self and val_before and getdate(val_self) != getdate(val_before):
 						frappe.throw(_("Only <b>Marketing Leads</b> are permitted to modify core item metadata ({0}).").format(field), frappe.PermissionError)
 				else:
 					if str(val_self or "") != str(val_before or ""):
 						frappe.throw(_("Only <b>Marketing Leads</b> are permitted to modify core item metadata ({0}).").format(field), frappe.PermissionError)
 
+	def validate_writer_readonly_before_briefed(self):
+		"""Content Writer cannot edit attachments or notes while item is in Planned state."""
+		if frappe.flags.ignore_permissions or self.flags.ignore_permissions:
+			return
+		if self.is_lead_user():
+			return
+		if getattr(self, "workflow_state", None) != "Planned":
+			return
+
+		before = self.get_doc_before_save()
+		if not before:
+			return
+
+		attachment_fields = ["content_file_1", "content_file_2", "content_file_3", "notes"]
+		for field in attachment_fields:
+			val_self = getattr(self, field, None)
+			val_before = getattr(before, field, None)
+			if str(val_self or "") != str(val_before or ""):
+				frappe.throw(
+					_("Content Writers cannot edit attachments or notes while the item is in <b>Planned</b> state. Wait until the brief is issued."),
+					frappe.PermissionError
+				)
+
 	def sync_status_with_workflow(self):
 		wf_state = getattr(self, "workflow_state", None)
-		settings = frappe.get_single("Marketing Settings")
-		enable_ai = getattr(settings, "enable_ai_copilot", 0)
-
-		if wf_state == "In Review - Technical" and enable_ai and not getattr(frappe.flags, "in_ai_copilot_review", False):
-			before = self.get_doc_before_save()
-			if not before or before.workflow_state in ["Briefed", "In Progress", "In Revision"] or self.ai_review_status != "Completed":
-				self.workflow_state = "Marketing Copilot Review"
-				self.status = "Marketing Copilot Review"
-				self.ai_review_status = "Queued"
-
-		elif wf_state == "Marketing Copilot Review":
-			if not enable_ai:
-				# If AI Copilot is disabled, bypass Marketing Copilot Review state completely
-				self.workflow_state = "In Review - Technical"
-				self.status = "In Review - Technical"
-			else:
-				before = self.get_doc_before_save()
-				if not before or before.workflow_state != "Marketing Copilot Review":
-					# Reset AI status to Queued when submitting or re-submitting for Copilot Review
-					self.ai_review_status = "Queued"
-				self.status = self.workflow_state
-		elif wf_state:
+		if wf_state:
 			self.status = wf_state
 		elif not getattr(self, "status", None):
 			self.status = "Planned"
@@ -115,36 +102,34 @@ class ContentItem(Document):
 			if cal.to_date and pub_date > getdate(cal.to_date):
 				frappe.throw(_("Planned Publish Date ({0}) cannot be after Content Calendar end date ({1}).").format(self.planned_publish_date, cal.to_date))
 
-	def calculate_sla_due_date(self):
-		if not self.planned_publish_date:
-			return
-
-		dt = getdate(self.planned_publish_date)
-		settings = frappe.get_single("Marketing Settings")
-		lead_days = int(getattr(settings, "default_sla_lead_days", 14) or 14)
-		self.sla_due_date = add_days(dt, -lead_days)
-
 	def check_overdue_sla(self):
 		if self.sla_due_date and getattr(self, "workflow_state", None) not in ["Approved", "Published"]:
 			if getdate(nowdate()) > getdate(self.sla_due_date):
 				self.risk_flag = "Late"
 
 	def validate_primary_attachment_mandatory(self):
-		target_states = ["Marketing Copilot Review", "In Review - Technical", "Approved", "Published"]
+		target_states = ["Marketing Copilot Review", "In Review", "Approved", "Published"]
 		if getattr(self, "workflow_state", None) in target_states and not self.content_file_1:
 			frappe.throw(_("<b>Primary Content Draft (content_file_1)</b> is mandatory before submitting for review or publishing."))
 
 	def validate_technical_reviewer_mandatory(self):
-		if getattr(self, "workflow_state", None) == "In Review - Technical" and not self.reviewer_technical:
-			frappe.throw(_("<b>Technical Reviewer</b> must be assigned before submitting for Technical Review."))
+		if getattr(self, "workflow_state", None) == "In Review" and not self.reviewer_technical:
+			frappe.throw(_("<b>Reviewer</b> must be assigned before submitting for Review."))
 
 	def validate_revision_notes(self):
 		if getattr(self, "workflow_state", None) == "In Revision" and not getattr(self, "revision_feedback_notes", None):
-			frappe.throw(_("<b>Reviewer Feedback / Notes</b> are mandatory when requesting revisions."))
+			frappe.throw(_("<b>Revision Feedback / Notes</b> are mandatory when requesting revisions."))
 
 	def validate_published_url_mandatory(self):
 		if getattr(self, "workflow_state", None) == "Published" and not getattr(self, "published_url", None):
-			frappe.throw(_("<b>Live Asset Published URL</b> is mandatory when marking a deliverable as Published."))
+			frappe.throw(_("<b>Published URL</b> is mandatory when marking a deliverable as Published."))
+
+	def stamp_brief_accepted_on(self):
+		"""Auto-stamp brief_accepted_on when writer transitions from Briefed to In Progress."""
+		if getattr(self, "workflow_state", None) == "In Progress" and not getattr(self, "brief_accepted_on", None):
+			before = self.get_doc_before_save()
+			if before and getattr(before, "workflow_state", None) == "Briefed":
+				self.brief_accepted_on = now_datetime()
 
 	def get_user_full_name(self, user_email):
 		if not user_email:
@@ -199,6 +184,17 @@ class ContentItem(Document):
 
 		if getattr(self, "workflow_state", None) == "Marketing Copilot Review":
 			if getattr(self, "ai_review_status", None) not in ["In Progress", "Completed"]:
+				# Check usage limit before queuing
+				max_reviews = int(getattr(settings, "max_copilot_reviews_per_item", 3) or 3)
+				current_count = len(self.ai_reviews or [])
+				if current_count >= max_reviews:
+					frappe.msgprint(
+						_("Copilot review limit reached ({0}/{1}). No additional AI reviews will be triggered.").format(current_count, max_reviews),
+						indicator="orange",
+						alert=True
+					)
+					return
+
 				self.db_set("ai_review_status", "Queued", update_modified=False)
 				try:
 					from oda_marketing.oda_marketing.ai_engine.runner import run_ai_review
@@ -222,9 +218,9 @@ class ContentItem(Document):
 			target_user = self.assigned_to
 			subject = f"Assigned Deliverable: '{self.title}' (Brief Issued)"
 
-		elif current_state == "In Review - Technical" and self.reviewer_technical:
+		elif current_state == "In Review" and self.reviewer_technical:
 			target_user = self.reviewer_technical
-			subject = f"Review Required: '{self.title}' (Technical Review)"
+			subject = f"Review Required: '{self.title}'"
 
 		elif current_state == "In Revision" and self.assigned_to:
 			target_user = self.assigned_to
@@ -282,7 +278,7 @@ class ContentItem(Document):
 				cc.add(self.owner)
 			template_name = settings.writer_email_template
 
-		elif current_state == "In Review - Technical":
+		elif current_state == "In Review":
 			if self.reviewer_technical:
 				recipients.add(self.reviewer_technical)
 			if self.assigned_to and self.assigned_to != self.reviewer_technical:
@@ -334,7 +330,7 @@ class ContentItem(Document):
 
 
 def send_overdue_sla_notifications():
-	"""Scheduled job to alert involved parties for late items."""
+	"""Scheduled job to alert involved parties for late items and upcoming due dates."""
 	settings = frappe.get_single("Marketing Settings")
 	if not settings.enable_email_notifications:
 		return
@@ -345,6 +341,7 @@ def send_overdue_sla_notifications():
 
 	tmpl = frappe.get_doc("Email Template", template_name)
 
+	# Send alerts for overdue (Late) items
 	overdue_items = frappe.get_all(
 		"Content Item",
 		filters={
@@ -377,6 +374,47 @@ def send_overdue_sla_notifications():
 			except Exception as e:
 				frappe.log_error(f"Failed to send overdue email for {item.name}: {str(e)}")
 
+	# Send reminder notifications for items approaching due date
+	sla_reminder_enabled = getattr(settings, "sla_reminder_enabled", 0)
+	if not sla_reminder_enabled:
+		return
+
+	days_before = int(getattr(settings, "sla_reminder_days_before", 3) or 3)
+	reminder_date = add_days(nowdate(), days_before)
+
+	upcoming_items = frappe.get_all(
+		"Content Item",
+		filters={
+			"sla_due_date": ["between", [nowdate(), reminder_date]],
+			"risk_flag": ["!=", "Late"],
+			"workflow_state": ["not in", ["Approved", "Published"]]
+		},
+		fields=["name"]
+	)
+
+	for item_data in upcoming_items:
+		item = frappe.get_doc("Content Item", item_data.name)
+		recipients = set()
+		if item.assigned_to:
+			recipients.add(item.assigned_to)
+		if item.reviewer_technical:
+			recipients.add(item.reviewer_technical)
+
+		if recipients:
+			try:
+				ctx = item.get_template_context()
+				subject = f"[REMINDER] Deliverable '{item.title}' due date approaching ({item.sla_due_date})"
+				message = frappe.render_template(tmpl.response, ctx)
+
+				frappe.sendmail(
+					recipients=list(recipients),
+					subject=subject,
+					message=message,
+					now=True
+				)
+			except Exception as e:
+				frappe.log_error(f"Failed to send reminder email for {item.name}: {str(e)}")
+
 
 @frappe.whitelist()
 def trigger_ai_copilot(docname):
@@ -387,8 +425,60 @@ def trigger_ai_copilot(docname):
 	if not frappe.has_permission("Content Item", "write", doc=docname):
 		frappe.throw(_("You do not have permission to trigger AI Copilot Review on this Content Item."), frappe.PermissionError)
 
+	settings = frappe.get_single("Marketing Settings")
+	if not getattr(settings, "enable_ai_copilot", 0):
+		frappe.throw(
+			_("AI Copilot is currently disabled in Marketing Settings. Enable it before triggering a review."),
+			frappe.ValidationError
+		)
+
+	# Check usage limit
+	doc = frappe.get_doc("Content Item", docname)
+	max_reviews = int(getattr(settings, "max_copilot_reviews_per_item", 3) or 3)
+	current_count = len(doc.ai_reviews or [])
+	if current_count >= max_reviews:
+		frappe.throw(
+			_("Copilot review limit reached ({0}/{1}). No additional AI reviews can be triggered for this item.").format(current_count, max_reviews),
+			frappe.ValidationError
+		)
+
 	from oda_marketing.oda_marketing.ai_engine.runner import run_ai_review
 	run_ai_review(docname)
+	return frappe.get_doc("Content Item", docname)
+
+
+@frappe.whitelist()
+def trigger_reviewer_copilot(docname, instructions=None):
+	"""Reviewer-triggered Copilot review with custom instructions."""
+	if not frappe.db.exists("Content Item", docname):
+		frappe.throw(_("Content Item {0} not found.").format(docname), frappe.DoesNotExistError)
+
+	if not frappe.has_permission("Content Item", "write", doc=docname):
+		frappe.throw(_("You do not have permission to trigger AI Copilot Review on this Content Item."), frappe.PermissionError)
+
+	settings = frappe.get_single("Marketing Settings")
+	if not getattr(settings, "enable_ai_copilot", 0):
+		frappe.throw(
+			_("AI Copilot is currently disabled in Marketing Settings. Enable it before triggering a review."),
+			frappe.ValidationError
+		)
+
+	# Check usage limit (shared counter across writer + reviewer triggers)
+	doc = frappe.get_doc("Content Item", docname)
+	max_reviews = int(getattr(settings, "max_copilot_reviews_per_item", 3) or 3)
+	current_count = len(doc.ai_reviews or [])
+	if current_count >= max_reviews:
+		frappe.throw(
+			_("Copilot review limit reached ({0}/{1}). No additional AI reviews can be triggered for this item.").format(current_count, max_reviews),
+			frappe.ValidationError
+		)
+
+	# Store reviewer instructions on the document
+	if instructions:
+		doc.db_set("reviewer_copilot_instructions", instructions, update_modified=False)
+
+	from oda_marketing.oda_marketing.ai_engine.runner import run_ai_review
+	run_ai_review(docname, reviewer_instructions=instructions)
 	return frappe.get_doc("Content Item", docname)
 
 
@@ -396,8 +486,10 @@ def trigger_ai_copilot(docname):
 def get_ai_copilot_status():
 	"""Whitelisted helper to check AI Copilot status without requiring read permission on Marketing Settings DocType."""
 	try:
+		settings = frappe.get_single("Marketing Settings")
 		return {
-			"enable_ai_copilot": int(frappe.db.get_single_value("Marketing Settings", "enable_ai_copilot") or 0)
+			"enable_ai_copilot": int(getattr(settings, "enable_ai_copilot", 0) or 0),
+			"max_copilot_reviews_per_item": int(getattr(settings, "max_copilot_reviews_per_item", 3) or 3)
 		}
 	except Exception:
-		return {"enable_ai_copilot": 0}
+		return {"enable_ai_copilot": 0, "max_copilot_reviews_per_item": 3}

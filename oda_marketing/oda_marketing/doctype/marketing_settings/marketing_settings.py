@@ -9,8 +9,9 @@ from frappe.model.document import Document
 class MarketingSettings(Document):
 	def validate(self):
 		if getattr(self, "default_sla_lead_days", None) is not None:
-			if int(self.default_sla_lead_days) <= 0:
-				frappe.throw(_("<b>Default SLA Lead Time (Days)</b> must be a positive number greater than 0."))
+			val = int(self.default_sla_lead_days or 0)
+			if val < 0:
+				frappe.throw(_("<b>Default SLA Lead Time (Days)</b> cannot be negative."))
 
 		if self.enable_email_notifications:
 			mandatory_fields = [
@@ -38,3 +39,12 @@ class MarketingSettings(Document):
 			for field in ai_mandatory_fields:
 				if not getattr(self, field, None):
 					frappe.throw(_("Field <b>{0}</b> is mandatory when AI Copilot is enabled.").format(self.meta.get_label(field)))
+
+			max_reviews = int(getattr(self, "max_copilot_reviews_per_item", 3) or 3)
+			if max_reviews < 1:
+				frappe.throw(_("<b>Max Copilot Reviews per Item</b> must be at least 1."))
+
+		if getattr(self, "sla_reminder_enabled", 0):
+			days_before = int(getattr(self, "sla_reminder_days_before", 0) or 0)
+			if days_before < 1:
+				frappe.throw(_("<b>Reminder Days Before Due Date</b> must be at least 1 when reminders are enabled."))

@@ -3,7 +3,7 @@ app_title = "ODA Marketing"
 app_publisher = "Optimum Data Analytics"
 app_description = "Agentic marketing operations platform for Optimum Data Analytics"
 app_email = "info@optimumdataanalytics.com"
-app_license = "mit"
+app_license = "Proprietary"
 
 # App Icon & Branding (standard Desk App Switcher layout)
 app_icon = "octicon octicon-megaphone"

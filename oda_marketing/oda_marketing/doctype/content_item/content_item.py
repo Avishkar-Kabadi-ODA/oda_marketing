@@ -12,6 +12,7 @@ class ContentItem(Document):
 		self.validate_creation_permissions()
 		self.validate_metadata_edit_permissions()
 		self.validate_writer_readonly_before_briefed()
+		self.validate_reviewer_readonly_fields()
 		self.sync_status_with_workflow()
 		self.validate_publish_date_with_calendar()
 		self.check_overdue_sla()
@@ -32,6 +33,13 @@ class ContentItem(Document):
 			return True
 		roles = frappe.get_roles(user)
 		return "Marketing Lead" in roles or "System Manager" in roles
+
+	def is_reviewer_user(self):
+		user = frappe.session.user
+		if user == "Administrator":
+			return True
+		roles = frappe.get_roles(user)
+		return "Technical Reviewer" in roles
 
 	def validate_creation_permissions(self):
 		if frappe.flags.ignore_permissions or self.flags.ignore_permissions:
@@ -83,6 +91,34 @@ class ContentItem(Document):
 			if str(val_self or "") != str(val_before or ""):
 				frappe.throw(
 					_("Content Writers cannot edit attachments or notes while the item is in <b>Planned</b> state. Wait until the brief is issued."),
+					frappe.PermissionError
+				)
+
+	def validate_reviewer_readonly_fields(self):
+		"""Technical Reviewer cannot edit attachments, notes, or metadata - only revision_feedback_notes and reviewer_copilot_instructions."""
+		if frappe.flags.ignore_permissions or self.flags.ignore_permissions:
+			return
+		if self.is_lead_user():
+			return
+		if not self.is_reviewer_user():
+			return
+
+		before = self.get_doc_before_save()
+		if not before:
+			return
+
+		# Reviewer can only edit these fields
+		allowed_fields = ["revision_feedback_notes", "reviewer_copilot_instructions"]
+		
+		# Check all fields that changed
+		for field in self.meta.get("fields", []):
+			if field.fieldname in allowed_fields:
+				continue
+			val_self = getattr(self, field.fieldname, None)
+			val_before = getattr(before, field.fieldname, None)
+			if str(val_self or "") != str(val_before or ""):
+				frappe.throw(
+					_("Technical Reviewers cannot edit <b>{0}</b>. Only revision feedback and copilot instructions can be modified.").format(field.label or field.fieldname),
 					frappe.PermissionError
 				)
 
@@ -183,13 +219,13 @@ class ContentItem(Document):
 			return
 
 		if getattr(self, "workflow_state", None) == "Marketing Copilot Review":
-			if getattr(self, "ai_review_status", None) not in ["In Progress", "Completed"]:
-				# Check usage limit before queuing
-				max_reviews = int(getattr(settings, "max_copilot_reviews_per_item", 3) or 3)
-				current_count = len(self.ai_reviews or [])
+			if getattr(self, "ai_review_status", None) not in ["In Progress", "Completed", "Queued"]:
+				# Check usage limit before queuing (Writer limit)
+				max_reviews = int(getattr(settings, "max_writer_copilot_reviews_per_item", 3) or 3)
+				current_count = len([r for r in (self.ai_reviews or []) if r.get("review_type") == "Writer"])
 				if current_count >= max_reviews:
 					frappe.msgprint(
-						_("Copilot review limit reached ({0}/{1}). No additional AI reviews will be triggered.").format(current_count, max_reviews),
+						_("Writer Copilot review limit reached ({0}/{1}). No additional AI reviews will be triggered.").format(current_count, max_reviews),
 						indicator="orange",
 						alert=True
 					)
@@ -198,7 +234,7 @@ class ContentItem(Document):
 				self.db_set("ai_review_status", "Queued", update_modified=False)
 				try:
 					from oda_marketing.oda_marketing.ai_engine.runner import run_ai_review
-					run_ai_review(self.name)
+					run_ai_review(self.name, review_type="Writer")
 				except Exception as e:
 					frappe.log_error(f"AI Copilot review execution error for {self.name}: {str(e)}")
 
@@ -418,7 +454,7 @@ def send_overdue_sla_notifications():
 
 @frappe.whitelist()
 def trigger_ai_copilot(docname):
-	"""Manual API trigger for Marketing Copilot Review."""
+	"""Manual API trigger for Marketing Copilot Review (Writer)."""
 	if not frappe.db.exists("Content Item", docname):
 		frappe.throw(_("Content Item {0} not found.").format(docname), frappe.DoesNotExistError)
 
@@ -432,18 +468,18 @@ def trigger_ai_copilot(docname):
 			frappe.ValidationError
 		)
 
-	# Check usage limit
+	# Check usage limit for Writer
 	doc = frappe.get_doc("Content Item", docname)
-	max_reviews = int(getattr(settings, "max_copilot_reviews_per_item", 3) or 3)
-	current_count = len(doc.ai_reviews or [])
+	max_reviews = int(getattr(settings, "max_writer_copilot_reviews_per_item", 3) or 3)
+	current_count = len([r for r in (doc.ai_reviews or []) if r.get("review_type") == "Writer"])
 	if current_count >= max_reviews:
 		frappe.throw(
-			_("Copilot review limit reached ({0}/{1}). No additional AI reviews can be triggered for this item.").format(current_count, max_reviews),
+			_("Writer Copilot review limit reached ({0}/{1}). No additional AI reviews can be triggered for this item.").format(current_count, max_reviews),
 			frappe.ValidationError
 		)
 
 	from oda_marketing.oda_marketing.ai_engine.runner import run_ai_review
-	run_ai_review(docname)
+	run_ai_review(docname, review_type="Writer")
 	return frappe.get_doc("Content Item", docname)
 
 
@@ -463,13 +499,13 @@ def trigger_reviewer_copilot(docname, instructions=None):
 			frappe.ValidationError
 		)
 
-	# Check usage limit (shared counter across writer + reviewer triggers)
+	# Check usage limit for Reviewer
 	doc = frappe.get_doc("Content Item", docname)
-	max_reviews = int(getattr(settings, "max_copilot_reviews_per_item", 3) or 3)
-	current_count = len(doc.ai_reviews or [])
+	max_reviews = int(getattr(settings, "max_reviewer_copilot_reviews_per_item", 3) or 3)
+	current_count = len([r for r in (doc.ai_reviews or []) if r.get("review_type") == "Reviewer"])
 	if current_count >= max_reviews:
 		frappe.throw(
-			_("Copilot review limit reached ({0}/{1}). No additional AI reviews can be triggered for this item.").format(current_count, max_reviews),
+			_("Reviewer Copilot review limit reached ({0}/{1}). No additional AI reviews can be triggered for this item.").format(current_count, max_reviews),
 			frappe.ValidationError
 		)
 
@@ -478,7 +514,7 @@ def trigger_reviewer_copilot(docname, instructions=None):
 		doc.db_set("reviewer_copilot_instructions", instructions, update_modified=False)
 
 	from oda_marketing.oda_marketing.ai_engine.runner import run_ai_review
-	run_ai_review(docname, reviewer_instructions=instructions)
+	run_ai_review(docname, reviewer_instructions=instructions, review_type="Reviewer")
 	return frappe.get_doc("Content Item", docname)
 
 
@@ -489,7 +525,8 @@ def get_ai_copilot_status():
 		settings = frappe.get_single("Marketing Settings")
 		return {
 			"enable_ai_copilot": int(getattr(settings, "enable_ai_copilot", 0) or 0),
-			"max_copilot_reviews_per_item": int(getattr(settings, "max_copilot_reviews_per_item", 3) or 3)
+			"max_writer_copilot_reviews_per_item": int(getattr(settings, "max_writer_copilot_reviews_per_item", 3) or 3),
+			"max_reviewer_copilot_reviews_per_item": int(getattr(settings, "max_reviewer_copilot_reviews_per_item", 3) or 3)
 		}
 	except Exception:
-		return {"enable_ai_copilot": 0, "max_copilot_reviews_per_item": 3}
+		return {"enable_ai_copilot": 0, "max_writer_copilot_reviews_per_item": 3, "max_reviewer_copilot_reviews_per_item": 3}

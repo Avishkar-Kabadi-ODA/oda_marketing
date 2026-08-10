@@ -12,6 +12,8 @@ frappe.ui.form.on("Marketing Settings", {
 		const enabled = Boolean(frm.doc.enable_ai_copilot);
 		const ai_fields = [
 			"ai_copilot_passing_score",
+			"max_writer_copilot_reviews_per_item",
+			"max_reviewer_copilot_reviews_per_item",
 			"ai_provider",
 			"ai_api_key_var",
 			"ai_endpoint_var",

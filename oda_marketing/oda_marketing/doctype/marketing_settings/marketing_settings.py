@@ -40,9 +40,13 @@ class MarketingSettings(Document):
 				if not getattr(self, field, None):
 					frappe.throw(_("Field <b>{0}</b> is mandatory when AI Copilot is enabled.").format(self.meta.get_label(field)))
 
-			max_reviews = int(getattr(self, "max_copilot_reviews_per_item", 3) or 3)
-			if max_reviews < 1:
-				frappe.throw(_("<b>Max Copilot Reviews per Item</b> must be at least 1."))
+			max_writer_reviews = int(getattr(self, "max_writer_copilot_reviews_per_item", 3) or 3)
+			if max_writer_reviews < 1:
+				frappe.throw(_("<b>Max Writer Copilot Reviews per Item</b> must be at least 1."))
+
+			max_reviewer_reviews = int(getattr(self, "max_reviewer_copilot_reviews_per_item", 3) or 3)
+			if max_reviewer_reviews < 1:
+				frappe.throw(_("<b>Max Reviewer Copilot Reviews per Item</b> must be at least 1."))
 
 		if getattr(self, "sla_reminder_enabled", 0):
 			days_before = int(getattr(self, "sla_reminder_days_before", 0) or 0)

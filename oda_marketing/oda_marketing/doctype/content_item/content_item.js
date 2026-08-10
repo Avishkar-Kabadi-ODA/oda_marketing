@@ -15,15 +15,20 @@ frappe.ui.form.on("Content Item", {
 			method: "oda_marketing.oda_marketing.doctype.content_item.content_item.get_ai_copilot_status",
 			callback: function(res) {
 				const enable_ai = res && res.message ? res.message.enable_ai_copilot : 0;
-				const max_reviews = res && res.message ? res.message.max_copilot_reviews_per_item : 3;
-				const current_review_count = (frm.doc.ai_reviews || []).length;
-				const limit_reached = current_review_count >= max_reviews;
+				const max_writer_reviews = res && res.message ? res.message.max_writer_copilot_reviews_per_item : 3;
+				const max_reviewer_reviews = res && res.message ? res.message.max_reviewer_copilot_reviews_per_item : 3;
+				const is_writer = frappe.user.has_role("Content Writer");
+				const is_reviewer = frappe.user.has_role("Technical Reviewer");
+				const is_lead = frappe.user.has_role("Marketing Lead") || frappe.user.has_role("System Manager") || frappe.session.user === "Administrator";
 
 				if (enable_ai) {
 					// Writer: show Run AI Copilot button when in Copilot Review or In Progress
 					const writer_copilot_states = ["Marketing Copilot Review", "In Progress"];
-					if (writer_copilot_states.includes(frm.doc.workflow_state) || frm.doc.ai_review_status === "Queued") {
-						if (!limit_reached) {
+					const writer_reviews = (frm.doc.ai_reviews || []).filter(r => r.review_type === "Writer");
+					const writer_limit_reached = writer_reviews.length >= max_writer_reviews;
+
+					if ((writer_copilot_states.includes(frm.doc.workflow_state) || frm.doc.ai_review_status === "Queued") && (is_writer || is_lead)) {
+						if (!writer_limit_reached) {
 							frm.add_custom_button(__("Run AI Copilot Review"), function() {
 								frappe.show_progress(__("Marketing Copilot Review"), 15, 100, __("Starting AI Copilot Review..."));
 								frappe.call({
@@ -36,17 +41,15 @@ frappe.ui.form.on("Content Item", {
 									}
 								});
 							}, __("Copilot"));
-						} else {
-							frm.add_custom_button(__("Copilot Limit Reached"), function() {
-								frappe.msgprint(__("Maximum Copilot reviews ({0}) reached for this item.", [max_reviews]));
-							}, __("Copilot"));
 						}
 					}
 
 					// Reviewer: show Run Copilot Review button when in "In Review" state
-					const is_reviewer = frappe.user.has_role("Technical Reviewer");
+					const reviewer_reviews = (frm.doc.ai_reviews || []).filter(r => r.review_type === "Reviewer");
+					const reviewer_limit_reached = reviewer_reviews.length >= max_reviewer_reviews;
+
 					if (is_reviewer && frm.doc.workflow_state === "In Review") {
-						if (!limit_reached) {
+						if (!reviewer_limit_reached) {
 							frm.add_custom_button(__("Run Copilot Review (Reviewer)"), function() {
 								let d = new frappe.ui.Dialog({
 									title: __("Reviewer Copilot Instructions"),
@@ -89,14 +92,6 @@ frappe.ui.form.on("Content Item", {
 					frm.set_df_property("ai_copilot_feedback", "hidden", 1);
 					frm.set_df_property("ai_reviews", "hidden", 1);
 				}
-
-				// Clean up internal workflow action buttons that users shouldn't see directly
-				setTimeout(() => {
-					frm.page.clear_action_item(__("Submit for Copilot Review"));
-					frm.page.remove_inner_button(__("Submit for Copilot Review"));
-					frm.page.clear_action_item(__("Resubmit Draft"));
-					frm.page.remove_inner_button(__("Resubmit Draft"));
-				}, 300);
 			}
 		});
 
@@ -121,6 +116,7 @@ frappe.ui.form.on("Content Item", {
 		const is_lead = frappe.user.has_role("Marketing Lead") || frappe.user.has_role("System Manager") || frappe.session.user === "Administrator";
 		const is_writer = frappe.user.has_role("Content Writer") || is_lead;
 		const is_reviewer = frappe.user.has_role("Technical Reviewer");
+		const is_assigned_writer = (frappe.session.user === frm.doc.assigned_to) || (frappe.session.user === frm.doc.owner);
 
 		if (!is_lead) {
 			const metadata_fields = [
@@ -143,13 +139,13 @@ frappe.ui.form.on("Content Item", {
 		// Writer read-only enforcement before Briefed state
 		const is_planned = frm.doc.workflow_state === "Planned";
 
-		if (is_writer) {
-			frm.set_df_property("content_file_1", "read_only", is_planned && !is_lead ? 1 : 0);
-			frm.set_df_property("content_file_2", "read_only", is_planned && !is_lead ? 1 : 0);
-			frm.set_df_property("content_file_3", "read_only", is_planned && !is_lead ? 1 : 0);
-			frm.set_df_property("notes", "read_only", is_planned && !is_lead ? 1 : 0);
+		if (is_writer && !is_lead) {
+			frm.set_df_property("content_file_1", "read_only", is_planned ? 1 : 0);
+			frm.set_df_property("content_file_2", "read_only", is_planned ? 1 : 0);
+			frm.set_df_property("content_file_3", "read_only", is_planned ? 1 : 0);
+			frm.set_df_property("notes", "read_only", is_planned ? 1 : 0);
 			frm.set_df_property("revision_feedback_notes", "read_only", 1);
-		} else if (is_reviewer) {
+		} else if (is_reviewer && !is_lead) {
 			frm.set_df_property("content_file_1", "read_only", 1);
 			frm.set_df_property("content_file_2", "read_only", 1);
 			frm.set_df_property("content_file_3", "read_only", 1);
@@ -167,11 +163,26 @@ frappe.ui.form.on("Content Item", {
 		// Hidden for all users on form view (viewable in Marketing Settings)
 		frm.set_df_property("ai_generated_prompt", "hidden", 1);
 
-		// AI Copilot Feedback & Review History Thread: visible ONLY to Content Writer (assigned writer / owner / Content Writer role) and Marketing Lead / System Manager
-		const is_assigned_writer = (frappe.session.user === frm.doc.assigned_to) || (frappe.session.user === frm.doc.owner) || frappe.user.has_role("Content Writer");
-		const can_see_ai_feedback = is_assigned_writer || is_lead || is_reviewer;
+		// AI Copilot Feedback & Review History: show only relevant reviews per role
+		// Writer sees only Writer reviews, Reviewer sees only Reviewer reviews, Lead sees all
+		const writer_reviews = (frm.doc.ai_reviews || []).filter(r => r.review_type === "Writer");
+		const reviewer_reviews = (frm.doc.ai_reviews || []).filter(r => r.review_type === "Reviewer");
 
-		frm.set_df_property("ai_copilot_feedback", "hidden", (can_see_ai_feedback && frm.doc.ai_copilot_feedback) ? 0 : 1);
-		frm.set_df_property("ai_reviews", "hidden", (can_see_ai_feedback && frm.doc.ai_reviews && frm.doc.ai_reviews.length > 0) ? 0 : 1);
+		if (is_reviewer && !is_lead) {
+			// Reviewer sees only Reviewer reviews
+			frm.set_df_property("ai_copilot_feedback", "hidden", (reviewer_reviews.length > 0 && frm.doc.ai_copilot_feedback) ? 0 : 1);
+			frm.set_df_property("ai_reviews", "hidden", (reviewer_reviews.length > 0) ? 0 : 1);
+		} else if (is_writer || is_assigned_writer) {
+			// Writer sees only Writer reviews
+			frm.set_df_property("ai_copilot_feedback", "hidden", (writer_reviews.length > 0 && frm.doc.ai_copilot_feedback) ? 0 : 1);
+			frm.set_df_property("ai_reviews", "hidden", (writer_reviews.length > 0) ? 0 : 1);
+		} else if (is_lead) {
+			// Lead sees all
+			frm.set_df_property("ai_copilot_feedback", "hidden", (frm.doc.ai_copilot_feedback) ? 0 : 1);
+			frm.set_df_property("ai_reviews", "hidden", (frm.doc.ai_reviews && frm.doc.ai_reviews.length > 0) ? 0 : 1);
+		} else {
+			frm.set_df_property("ai_copilot_feedback", "hidden", 1);
+			frm.set_df_property("ai_reviews", "hidden", 1);
+		}
 	}
 });

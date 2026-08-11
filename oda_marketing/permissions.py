@@ -46,8 +46,14 @@ def has_content_item_permission(doc, ptype="read", user=None):
 	publisher_lower = (publisher or "").lower()
 
 	roles = frappe.get_roles(user)
-	if user == "Administrator" or "System Manager" in roles or "Marketing Lead" in roles or user_lower == publisher_lower:
+	is_lead = user == "Administrator" or "System Manager" in roles or "Marketing Lead" in roles or user_lower == publisher_lower
+
+	if is_lead:
 		return True
+
+	# Creation and deletion rights are strictly restricted to Marketing Leads / System Managers
+	if ptype in ["delete", "create"]:
+		return False
 
 	assigned = (doc.assigned_to or "").lower()
 	tech_rev = (doc.reviewer_technical or "").lower()

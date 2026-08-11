@@ -138,7 +138,7 @@ def setup_email_templates_and_settings():
 </div>"""
 		},
 		{
-			"name": "Marketing Overdue SLA Alert",
+			"name": "Marketing Overdue Alert",
 			"subject": "[OVERDUE ALERT] Deliverable '{{ doc.title }}' Exceeded Due Date",
 			"response": """<p style='color: #dc2626; font-weight: bold;'>URGENT ESCALATION ALERT</p>
 <p>Content deliverable <b>{{ doc.title }}</b> (Planned Publish Date: {{ doc.planned_publish_date }}) has passed its Due Date ({{ doc.sla_due_date }}).</p>
@@ -223,7 +223,7 @@ EVALUATION GUIDELINES FOR THIS DELIVERABLE:
 
 def setup_workflow_states_and_actions():
 	state_names = [
-		"Planned", "Briefed", "In Progress", "Marketing Copilot Review",
+		"Planned", "Briefed", "In Progress",
 		"In Review", "In Revision", "Approved", "Published"
 	]
 	for state in state_names:
@@ -237,8 +237,7 @@ def setup_workflow_states_and_actions():
 
 	action_names = [
 		"Issue Brief", "Start Work", "Submit for Review",
-		"Run Copilot Review", "Request Changes",
-		"Approve", "Resubmit Draft", "Publish"
+		"Request Changes", "Approve", "Resubmit Draft", "Publish"
 	]
 	for action in action_names:
 		if not frappe.db.exists("Workflow Action Master", action):
@@ -261,7 +260,6 @@ def setup_workflow():
 		{"state": "Planned", "doc_status": "0", "allow_edit": "Marketing Lead", "style": "Primary"},
 		{"state": "Briefed", "doc_status": "0", "allow_edit": "Marketing Lead", "style": "Info"},
 		{"state": "In Progress", "doc_status": "0", "allow_edit": "Content Writer", "style": "Warning"},
-		{"state": "Marketing Copilot Review", "doc_status": "0", "allow_edit": "Content Writer", "style": "Info"},
 		{"state": "In Review", "doc_status": "0", "allow_edit": "Technical Reviewer", "style": "Warning"},
 		{"state": "In Revision", "doc_status": "0", "allow_edit": "Content Writer", "style": "Danger"},
 		{"state": "Approved", "doc_status": "0", "allow_edit": "Marketing Lead", "style": "Success"},
@@ -282,16 +280,6 @@ def setup_workflow():
 		{"state": "In Progress", "action": "Submit for Review", "next_state": "In Review", "allowed": "Content Writer"},
 		{"state": "In Progress", "action": "Submit for Review", "next_state": "In Review", "allowed": "Marketing Lead"},
 		{"state": "In Progress", "action": "Submit for Review", "next_state": "In Review", "allowed": "System Manager"},
-
-		# In Progress -> Marketing Copilot Review (optional AI review path)
-		{"state": "In Progress", "action": "Run Copilot Review", "next_state": "Marketing Copilot Review", "allowed": "Content Writer"},
-		{"state": "In Progress", "action": "Run Copilot Review", "next_state": "Marketing Copilot Review", "allowed": "Marketing Lead"},
-		{"state": "In Progress", "action": "Run Copilot Review", "next_state": "Marketing Copilot Review", "allowed": "System Manager"},
-
-		# Marketing Copilot Review -> In Review (after review completes, user manually advances)
-		{"state": "Marketing Copilot Review", "action": "Submit for Review", "next_state": "In Review", "allowed": "Content Writer"},
-		{"state": "Marketing Copilot Review", "action": "Submit for Review", "next_state": "In Review", "allowed": "Marketing Lead"},
-		{"state": "Marketing Copilot Review", "action": "Submit for Review", "next_state": "In Review", "allowed": "System Manager"},
 
 		# In Review -> In Revision (reviewer requests changes)
 		{"state": "In Review", "action": "Request Changes", "next_state": "In Revision", "allowed": "Technical Reviewer"},
@@ -336,7 +324,6 @@ def setup_kanban_board():
 		{"column_name": "Planned", "status": "Active", "indicator": "Gray"},
 		{"column_name": "Briefed", "status": "Active", "indicator": "Light Blue"},
 		{"column_name": "In Progress", "status": "Active", "indicator": "Orange"},
-		{"column_name": "Marketing Copilot Review", "status": "Active", "indicator": "Purple"},
 		{"column_name": "In Review", "status": "Active", "indicator": "Yellow"},
 		{"column_name": "In Revision", "status": "Active", "indicator": "Red"},
 		{"column_name": "Approved", "status": "Active", "indicator": "Cyan"},

@@ -8,20 +8,26 @@
 
 - **Content Delivery Pipeline**: Lifecycle management for Blogs, Polls, Flowcharts, Carousels, and custom content formats.
 - **Dynamic Option Management (`Content Item Option`)**: Decoupled dropdown options for Format (`content_type`) and Practice Area (`practice_area`) into a dedicated setup DocType with soft-disable (`is_active`) and custom sorting (`sort_order`).
-- **Streamlined Workflow State Machine**: Simplified workflow transitions (`Planned` → `Briefed` → `In Progress` → `In Review` → `Approved` → `Published`), featuring an optional `Marketing Copilot Review` state.
+- **Streamlined 7-Stage Workflow State Machine**: Pure operational workflow transitions (`Planned` → `Briefed` → `In Progress` → `In Review` → `In Revision` → `Approved` → `Published`).
 - **Informational AI Copilot Engine**:
   - Optional AI evaluation with dynamic prompt generation subagent.
-  - **Separate AI review limits** for Content Writer and Technical Reviewer roles.
-  - Non-blocking quality scoring: AI score is purely informational and no longer blocks workflow state transitions.
+  - **Toolbar Action Menu (`Copilot`)**: Triggered directly on-demand without mutating the workflow state.
+  - **Prerequisites for Copilot Actions**:
+    1. **Primary Content Draft (`content_file_1`)** must be attached.
+    2. **AI Copilot** must be enabled in **Marketing Settings**.
+    3. The role's review limit must not be exhausted.
+  - **Separate AI review limits** for Content Writer (`max_writer_copilot_reviews_per_item`) and Technical Reviewer (`max_reviewer_copilot_reviews_per_item`) roles.
+  - Non-blocking quality scoring: AI score is purely informational.
+  - Real-time client UI rendering: Updates score and evaluation history immediately without requiring manual page refresh.
   - Reviewer-triggered Copilot reviews with custom instruction inputs.
-  - Server-side usage limits enforced via `max_writer_copilot_reviews_per_item` and `max_reviewer_copilot_reviews_per_item` settings in **Marketing Settings**.
 - **Flexible Due Date & SLA Reminder Engine**:
   - Manually entered `sla_due_date` (**Due Date**), editable by both Marketing Leads and Content Writers.
   - Configurable SLA reminder alerts (`sla_reminder_enabled`, `sla_reminder_days_before`) sent prior to due dates.
 - **Role-Based Access Control & Safeguards**:
   - Strict permissions for `Marketing Lead`, `Content Writer`, `Technical Reviewer`, and `System Manager`.
+  - Blocked creation (`create: 0`) and deletion (`delete: 0`) rights for Content Writers and Technical Reviewers.
   - Read-only protection for Content Writers on draft attachments and notes prior to `Briefed` state.
-  - Server-side validation preventing Technical Reviewers from editing attachments, notes, or metadata (only `revision_feedback_notes` and `reviewer_copilot_instructions` are editable).
+  - Server-side validation preventing Technical Reviewers from editing metadata or draft attachments (only `revision_feedback_notes` and `reviewer_copilot_instructions` are editable).
   - Mandatory validation safeguards for primary draft attachment (`content_file_1`), assigned Reviewer, revision feedback notes, and live published URL.
 - **Targeted Notification Engine**:
   - HTML email notifications with direct Desk action buttons ("View Content Item in Desk").
@@ -44,57 +50,53 @@
 │  MARKETING LEAD  │     │ CONTENT WRITER   │     │ TECHNICAL REVIEWER│
 │                  │     │                  │     │                  │
 │ • Create Item    │────▶│ • Accept Brief   │────▶│ • Review Draft   │
-│ • Assign Writer  │     │ (Start Work)     │     │ • Run AI Copilot │
-│ • Assign Reviewer│     │ • Attach Files   │     │   (Reviewer)     │
-│ • Issue Brief    │     │ • Run AI Copilot │     │ • Approve /      │
-│ • Publish Final  │     │   (Writer)       │     │   Request Changes│
+│ • Assign Writer  │     │ (Start Work)     │     │ • Optional AI    │
+│ • Assign Reviewer│     │ • Attach Draft   │     │   Review (Copilot│
+│ • Issue Brief    │     │ • Optional AI    │     │   Menu)          │
+│ • Publish Final  │     │   Review (Copilot│     │ • Approve /      │
+│                  │     │   Menu)          │     │   Request Changes│
 └──────────────────┘     └──────────────────┘     └──────────────────┘
         │                       │                       │
         │                       │                       │
         ▼                       ▼                       ▼
    Planned ──(Issue Brief)──▶ Briefed ──(Start Work)──▶ In Progress
-                                                  │
-                                    ┌─────────────┴─────────────┐
-                                    ▼                           ▼
-                            (Run Copilot Review)           (Submit for Review)
-                                    │                           │
-                                    ▼                           ▼
-                          Marketing Copilot Review               │
-                                    │                           │
-                                    └───────────┬───────────────┘
-                                                ▼
-                                           In Review
-                                                │
-                                      ┌─────────┴─────────┐
-                                      ▼                   ▼
-                              (Request Changes)      (Approve)
-                                      │                   │
-                                      ▼                   ▼
-                              In Revision ◀──(Resubmit)  Approved
-                                      │                   │
-                                      └───────────┬───────┘
-                                                  ▼
-                                             Published
-                                                  │
-                                                  ▼
-                                         (Marketing Lead adds
-                                          Published URL)
+                                                        │
+                                                        ▼
+                                               (Submit for Review)
+                                                        │
+                                                        ▼
+                                                   In Review
+                                                        │
+                                              ┌─────────┴─────────┐
+                                              ▼                   ▼
+                                      (Request Changes)      (Approve)
+                                              │                   │
+                                              ▼                   ▼
+                                      In Revision ◀──(Resubmit)  Approved
+                                              │                   │
+                                              └───────────┬───────┘
+                                                          ▼
+                                                     Published
+                                                          │
+                                                          ▼
+                                                 (Marketing Lead adds
+                                                  Published URL)
 ```
 
 ### Step-by-Step Flow
 
-| Step | Role | Action | State Transition | Key Validations |
-|------|------|--------|------------------|-----------------|
-| 1 | **Marketing Lead** | Create Content Item | `Planned` | Only Marketing Lead can create |
+| Step | Role | Action | State Transition | Key Validations & Requirements |
+|------|------|--------|------------------|--------------------------------|
+| 1 | **Marketing Lead** | Create Content Item | `Planned` | Only Marketing Lead / System Manager can create |
 | 2 | **Marketing Lead** | Assign Writer, Reviewer, Calendar, Dates | `Planned` | All metadata editable by Lead |
 | 3 | **Marketing Lead** | **Issue Brief** | `Planned` → `Briefed` | Email + In-app notification to Writer |
 | 4 | **Content Writer** | **Start Work** (accepts brief) | `Briefed` → `In Progress` | Stamps `brief_accepted_on`; attachments unlocked |
-| 5 | **Content Writer** | Attach drafts (`content_file_1` mandatory) | `In Progress` | Can edit `sla_due_date`, files, notes |
-| 6 | **Content Writer** | **Run AI Copilot Review** (optional) | `In Progress` → `Marketing Copilot Review` | Uses **Writer limit** (`max_writer_copilot_reviews_per_item`) |
-| 7 | **Content Writer** | **Submit for Review** | `Marketing Copilot Review` → `In Review` | Requires `content_file_1` |
-| 8 | **Technical Reviewer** | Review in `In Review` state | `In Review` | Can only edit `revision_feedback_notes`, `reviewer_copilot_instructions` |
-| 9 | **Technical Reviewer** | **Run Copilot Review (Reviewer)** (optional) | `In Review` | Uses **Reviewer limit** (`max_reviewer_copilot_reviews_per_item`) with custom instructions |
-| 10 | **Technical Reviewer** | **Approve** OR **Request Changes** | `In Review` → `Approved` / `In Revision` | Changes requires mandatory `revision_feedback_notes` |
+| 5 | **Content Writer** | Attach Primary Draft (`content_file_1`) | `In Progress` | Can edit `sla_due_date`, draft files, notes |
+| 6 | **Content Writer** | **Run AI Copilot Review** (optional) | No State Mutation | Requires `content_file_1` attached + Copilot enabled + Count < Writer Limit |
+| 7 | **Content Writer** | **Submit for Review** | `In Progress` → `In Review` | Requires `content_file_1` & assigned `reviewer_technical` |
+| 8 | **Technical Reviewer** | Review in `In Review` state | `In Review` | Metadata & draft files locked; feedback notes editable |
+| 9 | **Technical Reviewer** | **Run Copilot Review (Reviewer)** (optional) | No State Mutation | Requires `content_file_1` attached + Copilot enabled + Count < Reviewer Limit |
+| 10 | **Technical Reviewer** | **Approve** OR **Request Changes** | `In Review` → `Approved` / `In Revision` | Request Changes requires mandatory `revision_feedback_notes` |
 | 11 | **Content Writer** | **Resubmit Draft** (if changes requested) | `In Revision` → `In Progress` | Loop back to step 5 |
 | 12 | **Marketing Lead / Publisher** | Add `published_url` & **Publish** | `Approved` → `Published` | Requires `published_url` |
 | 13 | **System** | Auto-notify Writer of publication | `Published` | Email with live URL |

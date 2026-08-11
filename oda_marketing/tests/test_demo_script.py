@@ -33,6 +33,9 @@ def create_unit_test_users():
 			user.insert(ignore_permissions=True)
 			from frappe.utils.password import update_password
 			update_password(u["email"], "Password123!")
+		else:
+			user = frappe.get_doc("User", u["email"])
+			user.add_roles(u["role"])
 
 
 class TestMarketingOperationsFlow(unittest.TestCase):
@@ -326,13 +329,11 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 		item.reload()
 		self.assertEqual(item.workflow_state, "In Progress")
 
-		# Writer optionally triggers Copilot Review from In Progress
-		apply_workflow(item, "Run Copilot Review")
+		# Writer optionally triggers Copilot Review from In Progress via API action (optional, no state mutation)
+		from oda_marketing.oda_marketing.doctype.content_item.content_item import trigger_ai_copilot
+		trigger_ai_copilot(item.name)
 		item.reload()
-		self.assertEqual(item.workflow_state, "Marketing Copilot Review")
-
-		# AI review may or may not complete synchronously in on_update
-		# The key behavior check: state is Marketing Copilot Review (optional path, not forced)
+		self.assertEqual(item.workflow_state, "In Progress")
 		self.assertIn(item.ai_review_status, ["Queued", "In Progress", "Completed"])
 
 		frappe.set_user("Administrator")

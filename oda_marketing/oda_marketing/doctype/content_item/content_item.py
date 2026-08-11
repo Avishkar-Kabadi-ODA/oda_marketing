@@ -95,7 +95,7 @@ class ContentItem(Document):
 				)
 
 	def validate_reviewer_readonly_fields(self):
-		"""Technical Reviewer cannot edit attachments, notes, or metadata - only revision_feedback_notes and reviewer_copilot_instructions."""
+		"""Technical Reviewer cannot edit attachments, notes, or metadata - only revision_feedback_notes, reviewer_copilot_instructions, and workflow_state (via workflow actions)."""
 		if frappe.flags.ignore_permissions or self.flags.ignore_permissions:
 			return
 		if self.is_lead_user():
@@ -107,20 +107,30 @@ class ContentItem(Document):
 		if not before:
 			return
 
-		# Reviewer can only edit these fields
-		allowed_fields = ["revision_feedback_notes", "reviewer_copilot_instructions"]
-		
-		# Check all fields that changed
-		for field in self.meta.get("fields", []):
-			if field.fieldname in allowed_fields:
-				continue
-			val_self = getattr(self, field.fieldname, None)
-			val_before = getattr(before, field.fieldname, None)
-			if str(val_self or "") != str(val_before or ""):
-				frappe.throw(
-					_("Technical Reviewers cannot edit <b>{0}</b>. Only revision feedback and copilot instructions can be modified.").format(field.label or field.fieldname),
-					frappe.PermissionError
-				)
+		# Forbidden metadata and draft attachment fields that Technical Reviewers cannot modify
+		forbidden_fields = [
+			"title", "content_type", "topic", "practice_area",
+			"content_calendar", "planned_publish_date", "assigned_to",
+			"reviewer_technical", "published_url", "risk_flag", "sla_due_date",
+			"content_file_1", "content_file_2", "content_file_3", "notes"
+		]
+
+		for fieldname in forbidden_fields:
+			val_self = getattr(self, fieldname, None)
+			val_before = getattr(before, fieldname, None)
+
+			if fieldname in ["planned_publish_date", "sla_due_date"]:
+				if val_self and val_before and getdate(val_self) != getdate(val_before):
+					frappe.throw(
+						_("Technical Reviewers cannot edit item metadata or attachments (<b>{0}</b>). Only revision feedback, copilot instructions, and workflow actions can be modified.").format(self.meta.get_label(fieldname) or fieldname),
+						frappe.PermissionError
+					)
+			else:
+				if str(val_self or "") != str(val_before or ""):
+					frappe.throw(
+						_("Technical Reviewers cannot edit item metadata or attachments (<b>{0}</b>). Only revision feedback, copilot instructions, and workflow actions can be modified.").format(self.meta.get_label(fieldname) or fieldname),
+						frappe.PermissionError
+					)
 
 	def sync_status_with_workflow(self):
 		wf_state = getattr(self, "workflow_state", None)
@@ -144,7 +154,7 @@ class ContentItem(Document):
 				self.risk_flag = "Late"
 
 	def validate_primary_attachment_mandatory(self):
-		target_states = ["Marketing Copilot Review", "In Review", "Approved", "Published"]
+		target_states = ["In Review", "Approved", "Published"]
 		if getattr(self, "workflow_state", None) in target_states and not self.content_file_1:
 			frappe.throw(_("<b>Primary Content Draft (content_file_1)</b> is mandatory before submitting for review or publishing."))
 
@@ -468,8 +478,15 @@ def trigger_ai_copilot(docname):
 			frappe.ValidationError
 		)
 
-	# Check usage limit for Writer
+	# Check primary content draft is attached
 	doc = frappe.get_doc("Content Item", docname)
+	if not (doc.content_file_1 or "").strip():
+		frappe.throw(
+			_("<b>Primary Content Draft</b> is mandatory to run AI Copilot Review. Please attach a draft file first."),
+			frappe.ValidationError
+		)
+
+	# Check usage limit for Writer
 	max_reviews = int(getattr(settings, "max_writer_copilot_reviews_per_item", 3) or 3)
 	current_count = len([r for r in (doc.ai_reviews or []) if r.get("review_type") == "Writer"])
 	if current_count >= max_reviews:
@@ -499,8 +516,15 @@ def trigger_reviewer_copilot(docname, instructions=None):
 			frappe.ValidationError
 		)
 
-	# Check usage limit for Reviewer
+	# Check primary content draft is attached
 	doc = frappe.get_doc("Content Item", docname)
+	if not (doc.content_file_1 or "").strip():
+		frappe.throw(
+			_("<b>Primary Content Draft</b> is mandatory to run AI Copilot Review. Please attach a draft file first."),
+			frappe.ValidationError
+		)
+
+	# Check usage limit for Reviewer
 	max_reviews = int(getattr(settings, "max_reviewer_copilot_reviews_per_item", 3) or 3)
 	current_count = len([r for r in (doc.ai_reviews or []) if r.get("review_type") == "Reviewer"])
 	if current_count >= max_reviews:

@@ -21,67 +21,83 @@ frappe.ui.form.on("Content Item", {
 				const is_reviewer = frappe.user.has_role("Technical Reviewer");
 				const is_lead = frappe.user.has_role("Marketing Lead") || frappe.user.has_role("System Manager") || frappe.session.user === "Administrator";
 
+				const has_primary_draft = !!(frm.doc.content_file_1 && String(frm.doc.content_file_1).trim());
+
 				if (enable_ai) {
-					// Writer: show Run AI Copilot button when in Copilot Review or In Progress
-					const writer_copilot_states = ["Marketing Copilot Review", "In Progress"];
-					const writer_reviews = (frm.doc.ai_reviews || []).filter(r => r.review_type === "Writer");
-					const writer_limit_reached = writer_reviews.length >= max_writer_reviews;
+					// Ensure AI section and core AI fields are visible when AI Copilot is enabled
+					frm.set_df_property("ai_section", "hidden", 0);
+					frm.set_df_property("ai_score", "hidden", 0);
+					frm.set_df_property("ai_review_status", "hidden", 0);
 
-					if ((writer_copilot_states.includes(frm.doc.workflow_state) || frm.doc.ai_review_status === "Queued") && (is_writer || is_lead)) {
-						if (!writer_limit_reached) {
-							frm.add_custom_button(__("Run AI Copilot Review"), function() {
-								frappe.show_progress(__("Marketing Copilot Review"), 15, 100, __("Starting AI Copilot Review..."));
-								frappe.call({
-									method: "oda_marketing.oda_marketing.doctype.content_item.content_item.trigger_ai_copilot",
-									args: { docname: frm.doc.name },
-									callback: function(r) {
-										frappe.hide_progress();
-										frappe.show_alert({ message: __("AI Copilot Review completed!"), indicator: "green" });
-										frm.reload_doc();
-									}
-								});
-							}, __("Copilot"));
-						}
-					}
+					// Copilot buttons require Primary Content Draft (content_file_1) to be attached
+					if (has_primary_draft) {
+						// Writer: show Run AI Copilot button when in active writing states (In Progress, In Revision, Briefed)
+						const writer_copilot_states = ["In Progress", "In Revision", "Briefed"];
+						const writer_reviews = (frm.doc.ai_reviews || []).filter(r => r.review_type === "Writer");
+						const writer_limit_reached = writer_reviews.length >= max_writer_reviews;
 
-					// Reviewer: show Run Copilot Review button when in "In Review" state
-					const reviewer_reviews = (frm.doc.ai_reviews || []).filter(r => r.review_type === "Reviewer");
-					const reviewer_limit_reached = reviewer_reviews.length >= max_reviewer_reviews;
-
-					if (is_reviewer && frm.doc.workflow_state === "In Review") {
-						if (!reviewer_limit_reached) {
-							frm.add_custom_button(__("Run Copilot Review (Reviewer)"), function() {
-								let d = new frappe.ui.Dialog({
-									title: __("Reviewer Copilot Instructions"),
-									fields: [
-										{
-											label: __("Instructions for AI Copilot"),
-											fieldname: "instructions",
-											fieldtype: "Small Text",
-											reqd: 1,
-											description: __("Provide specific evaluation instructions for the AI Copilot (e.g., 'Check technical accuracy of the AWS migration section').")
+						if ((writer_copilot_states.includes(frm.doc.workflow_state) || frm.doc.ai_review_status === "Queued") && (is_writer || is_lead)) {
+							if (!writer_limit_reached) {
+								frm.add_custom_button(__("Run AI Copilot Review"), function() {
+									frappe.show_progress(__("Marketing Copilot Review"), 15, 100, __("Starting AI Copilot Review..."));
+									frappe.call({
+										method: "oda_marketing.oda_marketing.doctype.content_item.content_item.trigger_ai_copilot",
+										args: { docname: frm.doc.name },
+										callback: function(r) {
+											frappe.hide_progress();
+											frappe.show_alert({ message: __("AI Copilot Review completed!"), indicator: "green" });
+											frm.reload_doc().then(() => {
+												frm.trigger("apply_role_field_permissions");
+												frm.refresh_fields();
+											});
 										}
-									],
-									primary_action_label: __("Run Copilot Review"),
-									primary_action(values) {
-										d.hide();
-										frappe.show_progress(__("Marketing Copilot Review"), 15, 100, __("Starting Reviewer Copilot Review..."));
-										frappe.call({
-											method: "oda_marketing.oda_marketing.doctype.content_item.content_item.trigger_reviewer_copilot",
-											args: {
-												docname: frm.doc.name,
-												instructions: values.instructions
-											},
-											callback: function(r) {
-												frappe.hide_progress();
-												frappe.show_alert({ message: __("Reviewer Copilot Review completed!"), indicator: "green" });
-												frm.reload_doc();
+									});
+								}, __("Copilot"));
+							}
+						}
+
+						// Reviewer: show Run Copilot Review button when in "In Review" state
+						const reviewer_reviews = (frm.doc.ai_reviews || []).filter(r => r.review_type === "Reviewer");
+						const reviewer_limit_reached = reviewer_reviews.length >= max_reviewer_reviews;
+
+						if (is_reviewer && frm.doc.workflow_state === "In Review") {
+							if (!reviewer_limit_reached) {
+								frm.add_custom_button(__("Run Copilot Review (Reviewer)"), function() {
+									let d = new frappe.ui.Dialog({
+										title: __("Reviewer Copilot Instructions"),
+										fields: [
+											{
+												label: __("Instructions for AI Copilot"),
+												fieldname: "instructions",
+												fieldtype: "Small Text",
+												reqd: 1,
+												description: __("Provide specific evaluation instructions for the AI Copilot (e.g., 'Check technical accuracy of the AWS migration section').")
 											}
-										});
-									}
-								});
-								d.show();
-							}, __("Copilot"));
+										],
+										primary_action_label: __("Run Copilot Review"),
+										primary_action(values) {
+											d.hide();
+											frappe.show_progress(__("Marketing Copilot Review"), 15, 100, __("Starting Reviewer Copilot Review..."));
+											frappe.call({
+												method: "oda_marketing.oda_marketing.doctype.content_item.content_item.trigger_reviewer_copilot",
+												args: {
+													docname: frm.doc.name,
+													instructions: values.instructions
+												},
+												callback: function(r) {
+													frappe.hide_progress();
+													frappe.show_alert({ message: __("Reviewer Copilot Review completed!"), indicator: "green" });
+													frm.reload_doc().then(() => {
+														frm.trigger("apply_role_field_permissions");
+														frm.refresh_fields();
+													});
+												}
+											});
+										}
+									});
+									d.show();
+								}, __("Copilot"));
+							}
 						}
 					}
 				} else {
@@ -92,6 +108,7 @@ frappe.ui.form.on("Content Item", {
 					frm.set_df_property("ai_copilot_feedback", "hidden", 1);
 					frm.set_df_property("ai_reviews", "hidden", 1);
 				}
+				frm.trigger("apply_role_field_permissions");
 			}
 		});
 
@@ -103,7 +120,12 @@ frappe.ui.form.on("Content Item", {
 					if (data.progress >= 100) {
 						frappe.hide_progress();
 						frappe.show_alert({ message: __("AI Copilot Review completed!"), indicator: "green" });
-						setTimeout(() => frm.reload_doc(), 800);
+						setTimeout(() => {
+							frm.reload_doc().then(() => {
+								frm.trigger("apply_role_field_permissions");
+								frm.refresh_fields();
+							});
+						}, 500);
 					} else {
 						frappe.show_progress(__("Marketing Copilot Review"), data.progress || 50, 100, data.message || __("Evaluating deliverable..."));
 					}
@@ -163,6 +185,9 @@ frappe.ui.form.on("Content Item", {
 		// Hidden for all users on form view (viewable in Marketing Settings)
 		frm.set_df_property("ai_generated_prompt", "hidden", 1);
 
+		// Always keep AI reviews table grid read-only to prevent user edits
+		frm.set_df_property("ai_reviews", "read_only", 1);
+
 		// AI Copilot Feedback & Review History: show only relevant reviews per role
 		// Writer sees only Writer reviews, Reviewer sees only Reviewer reviews, Lead sees all
 		const writer_reviews = (frm.doc.ai_reviews || []).filter(r => r.review_type === "Writer");
@@ -184,5 +209,10 @@ frappe.ui.form.on("Content Item", {
 			frm.set_df_property("ai_copilot_feedback", "hidden", 1);
 			frm.set_df_property("ai_reviews", "hidden", 1);
 		}
+
+		frm.refresh_field("ai_score");
+		frm.refresh_field("ai_review_status");
+		frm.refresh_field("ai_copilot_feedback");
+		frm.refresh_field("ai_reviews");
 	}
 });

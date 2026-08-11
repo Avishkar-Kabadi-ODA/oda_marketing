@@ -60,7 +60,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Status",
-   "options": "Planned\nBriefed\nIn Progress\nMarketing Copilot Review\nIn Review\nIn Revision\nApproved\nPublished",
+   "options": "Planned\nBriefed\nIn Progress\nIn Review\nIn Revision\nApproved\nPublished",
    "read_only": 1
   },
   {
@@ -318,10 +318,6 @@
   {
    "color": "Orange",
    "title": "In Progress"
-  },
-  {
-   "color": "Purple",
-   "title": "Marketing Copilot Review"
   },
   {
    "color": "Yellow",

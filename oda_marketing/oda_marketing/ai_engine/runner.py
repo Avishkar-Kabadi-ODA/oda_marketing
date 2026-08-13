@@ -7,7 +7,7 @@ from oda_marketing.oda_marketing.ai_engine.prompt_subagent import generate_dynam
 from oda_marketing.oda_marketing.ai_engine.evaluator_agent import evaluate_content_item, publish_stream_event
 
 
-def run_ai_review(docname, reviewer_instructions=None):
+def run_ai_review(docname, reviewer_instructions=None, review_type="Writer"):
 	"""
 	Background job orchestrator (frappe.enqueue):
 	1. Checks usage limit (max_copilot_reviews_per_item).
@@ -23,8 +23,12 @@ def run_ai_review(docname, reviewer_instructions=None):
 
 	# Check usage limit before starting review
 	settings = frappe.get_single("Marketing Settings")
-	max_reviews = int(getattr(settings, "max_copilot_reviews_per_item", 3) or 3)
-	current_count = len(doc.ai_reviews or [])
+	if review_type == "Reviewer":
+		max_reviews = int(getattr(settings, "max_reviewer_copilot_reviews_per_item", 3) or 3)
+		current_count = len([r for r in (doc.ai_reviews or []) if r.get("review_type") == "Reviewer"])
+	else:
+		max_reviews = int(getattr(settings, "max_writer_copilot_reviews_per_item", 3) or 3)
+		current_count = len([r for r in (doc.ai_reviews or []) if r.get("review_type") == "Writer"])
 	if current_count >= max_reviews:
 		frappe.throw(
 			_("Copilot review limit reached ({0}/{1}). No additional AI reviews can be triggered for this item.").format(current_count, max_reviews),
@@ -65,6 +69,7 @@ def run_ai_review(docname, reviewer_instructions=None):
 		verdict_label = "Passed" if score >= passing_score else "Revision Required"
 		doc.append("ai_reviews", {
 			"review_datetime": frappe.utils.now_datetime(),
+			"review_type": review_type,
 			"score": score,
 			"status": verdict_label,
 			"feedback": feedback,

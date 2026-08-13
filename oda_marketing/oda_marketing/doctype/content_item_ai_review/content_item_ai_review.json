@@ -4,23 +4,33 @@
  "doctype": "DocType",
  "editable_grid": 0,
  "engine": "InnoDB",
- "field_order": [
-  "review_datetime",
-  "score",
-  "status",
-  "feedback",
-  "system_prompt"
- ],
+"field_order": [
+   "review_datetime",
+   "review_type",
+   "score",
+   "status",
+   "feedback",
+   "system_prompt"
+  ],
  "fields": [
-  {
-   "fieldname": "review_datetime",
-   "fieldtype": "Datetime",
-   "in_list_view": 1,
-   "label": "Review Date & Time",
-   "read_only": 1
-  },
-  {
-   "fieldname": "score",
+{
+    "fieldname": "review_datetime",
+    "fieldtype": "Datetime",
+    "in_list_view": 1,
+    "label": "Review Date & Time",
+    "read_only": 1
+   },
+   {
+    "default": "Writer",
+    "fieldname": "review_type",
+    "fieldtype": "Select",
+    "in_list_view": 1,
+    "label": "Review Type",
+    "options": "Writer\nReviewer",
+    "read_only": 1
+   },
+   {
+    "fieldname": "score",
    "fieldtype": "Percent",
    "in_list_view": 1,
    "label": "AI Quality Score (%)",

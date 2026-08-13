@@ -177,7 +177,8 @@ def setup_email_templates_and_settings():
 	settings.default_sla_lead_days = 14
 	settings.ai_copilot_passing_score = 80
 	settings.ai_provider = "APIM Gateway"
-	settings.max_copilot_reviews_per_item = 3
+	settings.max_writer_copilot_reviews_per_item = 3
+	settings.max_reviewer_copilot_reviews_per_item = 3
 	settings.sla_reminder_enabled = 0
 	settings.sla_reminder_days_before = 3
 	settings.writer_email_template = "Marketing Writer Notification"

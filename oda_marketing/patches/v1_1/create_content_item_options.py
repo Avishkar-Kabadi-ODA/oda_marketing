@@ -22,13 +22,13 @@ def execute():
 				"sort_order": idx
 			}).insert(ignore_permissions=True)
 
-	# Create Practice Area options from old practice_area Select values
+	# Create Industry Domain options from old practice_area Select values
 	practice_area_options = ["HCLS", "Pharma Supply Chain", "Fintech", "Agriculture", "Cross-domain"]
 	for idx, label in enumerate(practice_area_options):
 		if not frappe.db.exists("Content Item Option", label):
 			frappe.get_doc({
 				"doctype": "Content Item Option",
-				"option_type": "Practice Area",
+				"option_type": "Industry Domain",
 				"option_label": label,
 				"is_active": 1,
 				"sort_order": idx

@@ -23,31 +23,37 @@ def setup_roles():
 
 
 def setup_content_item_options():
-	"""Create default Content Item Option records for Format and Practice Area."""
-	format_options = ["Blog", "Poll", "Flowchart", "Carousel"]
-	practice_area_options = ["HCLS", "Pharma Supply Chain", "Fintech", "Agriculture", "Cross-domain"]
+	"""Create default Content Item Option records for Format and Industry Domain."""
+	format_options = [
+		{"label": "Blog", "desc": "Detailed written article or post focusing on enterprise software or domain topics."},
+		{"label": "Poll", "desc": "Interactive survey or quick question format designed for engagement."},
+		{"label": "Flowchart", "desc": "Visual diagram detailing processes, data flows, or workflows."},
+		{"label": "Carousel", "desc": "Multi-slide visual presentation or swipeable graphic summary."}
+	]
+	industry_domain_options = ["HCLS", "Pharma Supply Chain", "Fintech", "Agriculture", "Cross-domain"]
 
-	for idx, label in enumerate(format_options):
-		if not frappe.db.exists("Content Item Option", label):
+	for idx, f in enumerate(format_options):
+		if not frappe.db.exists("Content Item Option", f["label"]):
 			frappe.get_doc({
 				"doctype": "Content Item Option",
 				"option_type": "Format",
-				"option_label": label,
+				"option_label": f["label"],
+				"option_description": f["desc"],
 				"is_active": 1,
 				"sort_order": idx
 			}).insert(ignore_permissions=True)
-			print(f"Created Content Item Option: Format - {label}")
+			print(f"Created Content Item Option: Format - {f['label']}")
 
-	for idx, label in enumerate(practice_area_options):
+	for idx, label in enumerate(industry_domain_options):
 		if not frappe.db.exists("Content Item Option", label):
 			frappe.get_doc({
 				"doctype": "Content Item Option",
-				"option_type": "Practice Area",
+				"option_type": "Industry Domain",
 				"option_label": label,
 				"is_active": 1,
 				"sort_order": idx
 			}).insert(ignore_permissions=True)
-			print(f"Created Content Item Option: Practice Area - {label}")
+			print(f"Created Content Item Option: Industry Domain - {label}")
 
 
 def setup_email_templates_and_settings():
@@ -58,7 +64,7 @@ def setup_email_templates_and_settings():
 			"response": """<p>Hello <b>{{ assigned_to_name }}</b>,</p>
 {% if doc.workflow_state == "Briefed" %}
   <p>You have been assigned to create the content deliverable <b>{{ doc.title }}</b> (Format: {{ doc.content_type }}). Task details have been issued for your review.</p>
-  <p><b>Planned Publish Date:</b> {{ doc.planned_publish_date }}</p>
+  <p><b>Due Date:</b> {{ doc.due_date }}</p>
   <p>Please log into the portal, review the task details, and proceed with drafting.</p>
 {% elif doc.workflow_state == "In Revision" %}
   <p>Revisions have been requested for your deliverable <b>{{ doc.title }}</b>.</p>
@@ -87,7 +93,7 @@ def setup_email_templates_and_settings():
   <li><b>Assigned Writer:</b> {{ assigned_to_name }}</li>
   <li><b>Created By:</b> {{ creator_name }}</li>
   <li><b>Reviewer:</b> {{ reviewer_technical_name }}</li>
-  <li><b>Due Date:</b> {{ doc.sla_due_date }}</li>
+  <li><b>Due Date:</b> {{ doc.due_date }}</li>
   {% if content_file_1_link %}
     <li><b>Primary Content Draft:</b> {{ content_file_1_link }}</li>
   {% endif %}
@@ -141,12 +147,26 @@ def setup_email_templates_and_settings():
 			"name": "Marketing Overdue Alert",
 			"subject": "[OVERDUE ALERT] Deliverable '{{ doc.title }}' Exceeded Due Date",
 			"response": """<p style='color: #dc2626; font-weight: bold;'>URGENT ESCALATION ALERT</p>
-<p>Content deliverable <b>{{ doc.title }}</b> (Planned Publish Date: {{ doc.planned_publish_date }}) has passed its Due Date ({{ doc.sla_due_date }}).</p>
+<p>Content deliverable <b>{{ doc.title }}</b> (Planned Publish Date: {{ doc.planned_publish_date }}) has passed its Due Date ({{ doc.due_date }}).</p>
 {% if content_file_1_link %}
   <p><b>Primary Content Draft:</b> {{ content_file_1_link }}</p>
 {% endif %}
 <div style='margin-top: 15px;'>
   <a href="{{ content_item_url }}" target="_blank" style="display: inline-block; background-color: #DC2626; color: #ffffff; padding: 10px 18px; text-decoration: none; border-radius: 6px; font-weight: 600;">View Content Item in Desk</a>
+</div>"""
+		},
+		{
+			"name": "Marketing Due Date Reminder",
+			"subject": "[DUE DATE REMINDER] Deliverable '{{ doc.title }}' Due Soon ({{ doc.due_date }})",
+			"response": """<p>Hello <b>{{ assigned_to_name }}</b>,</p>
+<p>This is a friendly reminder that the content deliverable <b>{{ doc.title }}</b> is approaching its Due Date (<b>{{ doc.due_date }}</b>).</p>
+<ul>
+  <li><b>Format:</b> {{ doc.content_type }}</li>
+  <li><b>Status:</b> {{ doc.workflow_state }}</li>
+  <li><b>Assigned Reviewer:</b> {{ reviewer_technical_name }}</li>
+</ul>
+<div style='margin-top: 15px;'>
+  <a href="{{ content_item_url }}" target="_blank" style="display: inline-block; background-color: #3B82F6; color: #ffffff; padding: 10px 18px; text-decoration: none; border-radius: 6px; font-weight: 600;">View Content Item in Desk</a>
 </div>"""
 		}
 	]
@@ -171,21 +191,18 @@ def setup_email_templates_and_settings():
 	# Initial Setup Defaults: Keep optional features (email notifications & AI copilot) disabled by default
 	# to allow clean installation without requiring pre-configured publisher/API settings.
 	settings = frappe.get_single("Marketing Settings")
-	settings.enable_email_notifications = 0
-	settings.enable_auto_overdue_flag = 0
-	settings.enable_ai_copilot = 0
-	settings.default_sla_lead_days = 14
-	settings.ai_copilot_passing_score = 80
-	settings.ai_provider = "APIM Gateway"
-	settings.max_writer_copilot_reviews_per_item = 3
-	settings.max_reviewer_copilot_reviews_per_item = 3
-	settings.sla_reminder_enabled = 0
-	settings.sla_reminder_days_before = 3
-	settings.writer_email_template = "Marketing Writer Notification"
-	settings.reviewer_email_template = "Marketing Reviewer Notification"
-	settings.publisher_email_template = "Marketing Publisher Notification"
-	settings.published_email_template = "Marketing Published Notification"
-	settings.overdue_sla_email_template = "Marketing Overdue SLA Alert"
+	if not getattr(settings, "overdue_email_template", None):
+		settings.writer_email_template = "Marketing Writer Notification"
+		settings.reviewer_email_template = "Marketing Reviewer Notification"
+		settings.publisher_email_template = "Marketing Publisher Notification"
+		settings.published_email_template = "Marketing Published Notification"
+		settings.overdue_email_template = "Marketing Overdue Alert"
+		settings.business_hours_start = 9
+		settings.business_hours_end = 19
+		settings.sla_reminder_days_before = 3
+		settings.max_writer_copilot_reviews_per_item = 2
+		settings.max_reviewer_copilot_reviews_per_item = 2
+		settings.save(ignore_permissions=True)
 
 	settings.subagent_meta_prompt = """You are a constructive AI Copilot & Enterprise Marketing Auditor for Optimum Data Analytics (ODA).
 Your task is to analyze deliverable metadata and create a practical, fair System Prompt for evaluating the document.

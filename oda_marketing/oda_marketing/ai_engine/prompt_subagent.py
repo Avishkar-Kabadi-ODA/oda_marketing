@@ -13,15 +13,16 @@ Your task is to analyze deliverable metadata and create a practical, fair System
 
 INPUT METADATA:
 - Deliverable Title: {title}
-- Content Type: {content_type} (Blog, Poll, Flowchart, Carousel)
-- Topic / Brief: {topic}
-- Practice Area / Domain: {practice_area}
+- Content Type / Format: {content_type}
+- Option Expectations: {option_description}
+- Description / Brief: {topic}
+- Industry Domain: {practice_area}
 - Minimum Passing Threshold: 80%
 
 INSTRUCTIONS FOR GENERATING THE SYSTEM PROMPT:
 Construct a System Prompt instructing the Evaluator Agent to:
 1. Praise strong structure, clear domain terminology, engaging enterprise tone, and alignment with "{topic}".
-2. Evaluate technical relevance for {practice_area} and structure for {content_type}.
+2. Evaluate technical relevance for Industry Domain "{practice_area}" and format expectations for "{content_type}": {option_description}.
 3. Award high passing scores (85%–98%) for complete, well-written enterprise deliverables.
 4. Only request revisions if content is missing, blank, or severely incomplete.
 
@@ -37,8 +38,12 @@ def generate_dynamic_system_prompt(doc, reviewer_instructions=None):
 	"""
 	title = getattr(doc, "title", "Untitled Marketing Deliverable")
 	content_type = getattr(doc, "content_type", "Blog")
-	topic = getattr(doc, "topic", "General Enterprise Analytics")
-	practice_area = getattr(doc, "practice_area", "Cross-domain")
+	topic = getattr(doc, "description", None) or getattr(doc, "topic", "General Enterprise Analytics")
+	practice_area = getattr(doc, "industry_domain", None) or getattr(doc, "practice_area", "Cross-domain")
+
+	option_description = ""
+	if content_type and frappe.db.exists("Content Item Option", content_type):
+		option_description = frappe.db.get_value("Content Item Option", content_type, "option_description") or ""
 
 	settings = frappe.get_single("Marketing Settings")
 	meta_template = getattr(settings, "subagent_meta_prompt", None)
@@ -53,22 +58,24 @@ def generate_dynamic_system_prompt(doc, reviewer_instructions=None):
 			title=title,
 			content_type=content_type,
 			topic=topic,
-			practice_area=practice_area
+			practice_area=practice_area,
+			option_description=option_description
 		)
 	except Exception:
 		meta_prompt = SUBAGENT_META_PROMPT.format(
 			title=title,
 			content_type=content_type,
 			topic=topic,
-			practice_area=practice_area
+			practice_area=practice_area,
+			option_description=option_description
 		)
 
 	# Append reviewer instructions to meta prompt if provided
 	if reviewer_instructions and reviewer_instructions.strip():
 		meta_prompt += f"\n\nADDITIONAL REVIEWER INSTRUCTIONS:\n{reviewer_instructions.strip()}"
 
-	# If no live API key is configured or mock provider, return structured dynamic template fallback
-	if provider == "Mock Agent" or not llm_cfg.get("api_key") or llm_cfg.get("api_key") == "mock-key":
+	# If no live API key is configured or mock/custom provider, return structured dynamic template fallback
+	if provider in ["Mock Agent", "Custom"] or not llm_cfg.get("api_key") or llm_cfg.get("api_key") == "mock-key":
 		return build_fallback_dynamic_prompt(title, content_type, topic, practice_area, reviewer_instructions=reviewer_instructions)
 
 	try:
@@ -107,6 +114,26 @@ def generate_dynamic_system_prompt(doc, reviewer_instructions=None):
 			with urllib.request.urlopen(req, timeout=30) as resp:
 				res_data = json.loads(resp.read().decode("utf-8"))
 				generated_prompt = res_data["candidates"][0]["content"]["parts"][0]["text"].strip()
+				return generated_prompt
+
+		elif provider == "Anthropic":
+			url = f"{llm_cfg['endpoint'].rstrip('/')}/messages"
+			headers = {
+				"Content-Type": "application/json",
+				"x-api-key": llm_cfg["api_key"],
+				"anthropic-version": "2023-06-01"
+			}
+			payload = {
+				"model": llm_cfg["model"],
+				"system": "You are a prompt generator subagent.",
+				"messages": [{"role": "user", "content": meta_prompt}],
+				"max_tokens": 1024,
+				"temperature": 0.3
+			}
+			req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
+			with urllib.request.urlopen(req, timeout=30) as resp:
+				res_data = json.loads(resp.read().decode("utf-8"))
+				generated_prompt = res_data["content"][0]["text"].strip()
 				return generated_prompt
 
 	except Exception as e:

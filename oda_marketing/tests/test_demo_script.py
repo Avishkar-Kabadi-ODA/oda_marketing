@@ -66,7 +66,9 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 			"topic": "Unauthorized creation",
 			"content_calendar": cal.name,
 			"planned_publish_date": "2026-09-01",
-			"assigned_to": "writer.test@oda.local"
+			"sla_due_date": "2026-08-25",
+			"assigned_to": "writer.test@oda.local",
+			"reviewer_technical": "Avishkar.Kabadi@optimumdataanalytics.com"
 		})
 		self.assertRaises(frappe.PermissionError, item_unauthorized.insert)
 
@@ -79,6 +81,7 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 			"topic": "Authorized creation",
 			"content_calendar": cal.name,
 			"planned_publish_date": "2026-09-01",
+			"sla_due_date": "2026-08-25",
 			"assigned_to": "writer.test@oda.local",
 			"reviewer_technical": "Avishkar.Kabadi@optimumdataanalytics.com"
 		})

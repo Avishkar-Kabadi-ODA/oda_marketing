@@ -37,6 +37,7 @@ class TestContentCalendar(FrappeTestCase):
 			"practice_area": "Cross-domain",
 			"content_calendar": calendar.name,
 			"planned_publish_date": "2026-10-15",
+			"sla_due_date": "2026-10-20",
 			"assigned_to": "writer.test@oda.local",
 			"reviewer_technical": "Avishkar.Kabadi@optimumdataanalytics.com"
 		})
@@ -63,6 +64,7 @@ class TestContentCalendar(FrappeTestCase):
 			"practice_area": "Fintech",
 			"content_calendar": cal_name,
 			"planned_publish_date": "2026-11-01",
+			"sla_due_date": "2026-11-05",
 			"assigned_to": "writer.test@oda.local",
 			"reviewer_technical": "Avishkar.Kabadi@optimumdataanalytics.com",
 			"workflow_state": "Planned",

@@ -7,6 +7,7 @@
  "field_order": [
   "option_type",
   "option_label",
+  "option_description",
   "column_break_1",
   "is_active",
   "sort_order"
@@ -18,7 +19,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Option Type",
-   "options": "Format\nPractice Area",
+   "options": "Format\nIndustry Domain",
    "reqd": 1
   },
   {
@@ -28,6 +29,11 @@
    "label": "Option Label",
    "reqd": 1,
    "unique": 1
+  },
+  {
+   "fieldname": "option_description",
+   "fieldtype": "Small Text",
+   "label": "Option Description"
   },
   {
    "fieldname": "column_break_1",

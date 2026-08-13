@@ -9,17 +9,20 @@
   "title",
   "status",
   "content_type",
-  "topic",
-  "practice_area",
+  "description",
+  "industry_domain",
   "column_break_1",
   "content_calendar",
   "planned_publish_date",
-  "sla_due_date",
+  "due_date",
+  "reminder_1_days_before",
+  "reminder_2_days_before",
   "risk_flag",
   "assigned_to",
   "reviewer_technical",
   "brief_accepted_on",
   "published_url",
+  "last_overdue_notified_on",
   "content_section",
   "content_file_1",
   "content_file_2",
@@ -74,18 +77,19 @@
    "link_filters": "[[\"Content Item Option\", \"option_type\", \"=\", \"Format\"], [\"Content Item Option\", \"is_active\", \"=\", 1]]"
   },
   {
-   "fieldname": "topic",
+   "description": "Maximum 500 characters allowed",
+   "fieldname": "description",
    "fieldtype": "Small Text",
-   "label": "Topic",
+   "label": "Description",
    "reqd": 1
   },
   {
-   "fieldname": "practice_area",
+   "fieldname": "industry_domain",
    "fieldtype": "Link",
    "in_standard_filter": 1,
-   "label": "Practice Area",
+   "label": "Industry Domain",
    "options": "Content Item Option",
-   "link_filters": "[[\"Content Item Option\", \"option_type\", \"=\", \"Practice Area\"], [\"Content Item Option\", \"is_active\", \"=\", 1]]"
+   "link_filters": "[[\"Content Item Option\", \"option_type\", \"=\", \"Industry Domain\"], [\"Content Item Option\", \"is_active\", \"=\", 1]]"
   },
   {
    "fieldname": "column_break_1",
@@ -108,6 +112,32 @@
    "reqd": 1
   },
   {
+   "fieldname": "due_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Due Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "reminder_1_days_before",
+   "fieldtype": "Int",
+   "label": "Reminder 1 (Days Before Due Date)"
+  },
+  {
+   "fieldname": "reminder_2_days_before",
+   "fieldtype": "Int",
+   "label": "Reminder 2 (Days Before Due Date)"
+  },
+  {
+   "default": "On track",
+   "fieldname": "risk_flag",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Risk Status",
+   "options": "On track\nAt risk\nLate"
+  },
+  {
    "fieldname": "assigned_to",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -121,7 +151,27 @@
    "fieldtype": "Link",
    "in_standard_filter": 1,
    "label": "Reviewer",
-   "options": "User"
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "fieldname": "brief_accepted_on",
+   "fieldtype": "Datetime",
+   "label": "Brief Accepted On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "published_url",
+   "fieldtype": "Data",
+   "label": "Published URL",
+   "options": "URL"
+  },
+  {
+   "fieldname": "last_overdue_notified_on",
+   "fieldtype": "Date",
+   "hidden": 1,
+   "label": "Last Overdue Notified On",
+   "read_only": 1
   },
   {
    "fieldname": "content_section",
@@ -143,37 +193,6 @@
    "fieldname": "content_file_3",
    "fieldtype": "Attach",
    "label": "Supporting Asset 2 (Optional)"
-  },
-  {
-   "fieldname": "column_break_2",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "sla_due_date",
-   "fieldtype": "Date",
-   "in_list_view": 1,
-   "label": "Due Date"
-  },
-  {
-   "default": "On track",
-   "fieldname": "risk_flag",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Risk Status",
-   "options": "On track\nAt risk\nLate"
-  },
-  {
-   "fieldname": "published_url",
-   "fieldtype": "Data",
-   "label": "Published URL",
-   "options": "URL"
-  },
-  {
-   "fieldname": "brief_accepted_on",
-   "fieldtype": "Datetime",
-   "label": "Brief Accepted On",
-   "read_only": 1
   },
   {
    "fieldname": "feedback_section",
@@ -247,7 +266,7 @@
  "icon": "tickets",
  "idx": 0,
  "links": [],
- "modified": "2026-08-05 18:00:00",
+ "modified": "2026-08-13 08:50:00",
  "modified_by": "Administrator",
  "module": "ODA Marketing",
  "name": "Content Item",
@@ -303,7 +322,7 @@
    "write": 1
   }
  ],
- "search_fields": "title, content_type, topic, status",
+ "search_fields": "title, content_type, description, status",
  "sort_field": "planned_publish_date",
  "sort_order": "DESC",
  "states": [

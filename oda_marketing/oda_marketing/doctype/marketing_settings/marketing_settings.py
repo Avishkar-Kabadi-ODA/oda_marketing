@@ -8,10 +8,20 @@ from frappe.model.document import Document
 
 class MarketingSettings(Document):
 	def validate(self):
-		if getattr(self, "default_sla_lead_days", None) is not None:
-			val = int(self.default_sla_lead_days or 0)
-			if val < 0:
-				frappe.throw(_("<b>Default SLA Lead Time (Days)</b> cannot be negative."))
+		if getattr(self, "business_hours_start", None) is None:
+			self.business_hours_start = 9
+		if getattr(self, "business_hours_end", None) is None:
+			self.business_hours_end = 19
+
+		start_h = int(self.business_hours_start) if self.business_hours_start is not None else 9
+		end_h = int(self.business_hours_end) if self.business_hours_end is not None else 19
+
+		if not (0 <= start_h <= 23):
+			frappe.throw(_("<b>Business Hours Start</b> must be between 0 and 23."))
+		if not (0 <= end_h <= 23):
+			frappe.throw(_("<b>Business Hours End</b> must be between 0 and 23."))
+		if start_h >= end_h:
+			frappe.throw(_("<b>Business Hours Start</b> must be earlier than <b>Business Hours End</b>."))
 
 		if self.enable_email_notifications:
 			mandatory_fields = [
@@ -20,7 +30,7 @@ class MarketingSettings(Document):
 				"reviewer_email_template",
 				"publisher_email_template",
 				"published_email_template",
-				"overdue_sla_email_template"
+				"overdue_email_template"
 			]
 			for field in mandatory_fields:
 				if not getattr(self, field, None):
@@ -40,11 +50,11 @@ class MarketingSettings(Document):
 				if not getattr(self, field, None):
 					frappe.throw(_("Field <b>{0}</b> is mandatory when AI Copilot is enabled.").format(self.meta.get_label(field)))
 
-			max_writer_reviews = int(getattr(self, "max_writer_copilot_reviews_per_item", 3) or 3)
+			max_writer_reviews = int(getattr(self, "max_writer_copilot_reviews_per_item", 2) or 2)
 			if max_writer_reviews < 1:
 				frappe.throw(_("<b>Max Writer Copilot Reviews per Item</b> must be at least 1."))
 
-			max_reviewer_reviews = int(getattr(self, "max_reviewer_copilot_reviews_per_item", 3) or 3)
+			max_reviewer_reviews = int(getattr(self, "max_reviewer_copilot_reviews_per_item", 2) or 2)
 			if max_reviewer_reviews < 1:
 				frappe.throw(_("<b>Max Reviewer Copilot Reviews per Item</b> must be at least 1."))
 

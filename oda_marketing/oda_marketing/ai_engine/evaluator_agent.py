@@ -24,12 +24,20 @@ def evaluate_content_item(doc, dynamic_system_prompt, user_email=None, reviewer_
 	if reviewer_instructions and reviewer_instructions.strip():
 		reviewer_section = f"\n\nADDITIONAL REVIEWER INSTRUCTIONS:\n{reviewer_instructions.strip()}"
 
+	option_description = ""
+	if doc.content_type and frappe.db.exists("Content Item Option", doc.content_type):
+		option_description = frappe.db.get_value("Content Item Option", doc.content_type, "option_description") or ""
+
+	industry_domain_val = getattr(doc, "industry_domain", None) or getattr(doc, "practice_area", "Cross-domain")
+	description_val = getattr(doc, "description", None) or getattr(doc, "topic", "General Enterprise Analytics")
+
 	user_prompt = f"""
 CONTENT DELIVERABLE TO EVALUATE:
 - Title: {doc.title}
-- Content Type: {doc.content_type}
-- Practice Area: {doc.practice_area}
-- Topic / Brief: {doc.topic}
+- Content Type / Format: {doc.content_type}
+- Format Expectations (Option Description): {option_description}
+- Industry Domain: {industry_domain_val}
+- Description / Brief: {description_val}
 
 DRAFT CONTENT & ATTACHMENT TEXT:
 {draft_text}
@@ -44,7 +52,7 @@ Evaluate this deliverable according to your System Prompt criteria and output va
 	publish_stream_event(docname, user_email, f"Connecting to {provider} for Copilot evaluation...", progress=40)
 
 	# If mock agent or no key, perform heuristic quality evaluation
-	if provider == "Mock Agent" or not llm_cfg.get("api_key") or llm_cfg.get("api_key") == "mock-key":
+	if provider in ["Mock Agent", "Custom"] or not llm_cfg.get("api_key") or llm_cfg.get("api_key") == "mock-key":
 		return run_heuristic_mock_evaluation(doc, draft_text)
 
 	try:
@@ -76,12 +84,6 @@ Evaluate this deliverable according to your System Prompt criteria and output va
 				raw_content = res_data["choices"][0]["message"]["content"]
 				res_json = json.loads(raw_content)
 
-				frappe.logger().debug(f"DEBUG OpenAI JSON Response: {raw_content}")
-				print("="*40)
-				print("DEBUG OpenAI JSON Response:")
-				print(raw_content)
-				print("="*40)
-
 				publish_stream_event(docname, user_email, f"Evaluation complete. Score: {res_json.get('overall_score', 0)}%", progress=90)
 				return format_eval_result(res_json)
 
@@ -100,6 +102,32 @@ Evaluate this deliverable according to your System Prompt criteria and output va
 			with urllib.request.urlopen(req, timeout=60) as resp:
 				res_data = json.loads(resp.read().decode("utf-8"))
 				raw_content = res_data["candidates"][0]["content"]["parts"][0]["text"]
+				res_json = json.loads(raw_content)
+
+				publish_stream_event(docname, user_email, f"Evaluation complete. Score: {res_json.get('overall_score', 0)}%", progress=90)
+				return format_eval_result(res_json)
+
+		elif provider == "Anthropic":
+			url = f"{llm_cfg['endpoint'].rstrip('/')}/messages"
+			headers = {
+				"Content-Type": "application/json",
+				"x-api-key": llm_cfg["api_key"],
+				"anthropic-version": "2023-06-01"
+			}
+			payload = {
+				"model": llm_cfg["model"],
+				"system": dynamic_system_prompt,
+				"messages": [{"role": "user", "content": user_prompt}],
+				"max_tokens": 2048,
+				"temperature": 0.2
+			}
+
+			publish_stream_event(docname, user_email, "Analyzing technical accuracy & domain depth via Anthropic...", progress=65)
+
+			req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
+			with urllib.request.urlopen(req, timeout=60) as resp:
+				res_data = json.loads(resp.read().decode("utf-8"))
+				raw_content = res_data["content"][0]["text"]
 				res_json = json.loads(raw_content)
 
 				publish_stream_event(docname, user_email, f"Evaluation complete. Score: {res_json.get('overall_score', 0)}%", progress=90)
@@ -136,11 +164,14 @@ def run_heuristic_mock_evaluation(doc, draft_text):
 	settings = frappe.get_single("Marketing Settings")
 	passing_score = int(getattr(settings, "ai_copilot_passing_score", 80) or 80)
 
+	description_val = getattr(doc, "description", None) or getattr(doc, "topic", "General Enterprise Analytics")
+	industry_domain_val = getattr(doc, "industry_domain", None) or getattr(doc, "practice_area", "Cross-domain")
+
 	text_len = len((draft_text or "").strip())
 	has_attachment = bool(doc.content_file_1)
 	has_topic_match = any(
 		word.lower() in draft_text.lower() or word.lower() in (doc.title or "").lower()
-		for word in (doc.topic or "").split() if len(word) > 3
+		for word in (description_val or "").split() if len(word) > 3
 	)
 
 	# If draft has primary attachment, rich content, or topic match -> Pass with 92%
@@ -154,9 +185,9 @@ def run_heuristic_mock_evaluation(doc, draft_text):
 	verdict = "PASS" if score >= passing_score else "REJECT"
 
 	strengths = [
-		f"Solid topic coverage aligned with '{doc.topic}'.",
+		f"Solid topic coverage aligned with '{description_val}'.",
 		f"Structured appropriately for a {doc.content_type} deliverable.",
-		f"Domain context matches {doc.practice_area} requirements."
+		f"Domain context matches {industry_domain_val} requirements."
 	]
 
 	flaws = []
@@ -175,7 +206,7 @@ def run_heuristic_mock_evaluation(doc, draft_text):
 	feedback_md = f"""### AI Copilot Evaluation Summary
 - **Overall Score**: {score}%
 - **Status Verdict**: **{verdict}** (Threshold: {passing_score}%)
-- **Content Type**: {doc.content_type} | **Domain**: {doc.practice_area}
+- **Content Type**: {doc.content_type} | **Domain**: {industry_domain_val}
 
 #### Key Strengths:
 {strengths_md}

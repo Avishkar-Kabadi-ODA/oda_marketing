@@ -2,8 +2,29 @@
 // For license information, please see license.txt
 
 frappe.ui.form.on("Content Item", {
+	setup(frm) {
+		frm.set_query("content_type", function() {
+			return {
+				filters: {
+					option_type: "Format",
+					is_active: 1
+				}
+			};
+		});
+
+		frm.set_query("industry_domain", function() {
+			return {
+				filters: {
+					option_type: "Industry Domain",
+					is_active: 1
+				}
+			};
+		});
+	},
+
 	refresh(frm) {
 		frm.trigger("apply_role_field_permissions");
+		frm.trigger("update_description_inline_counter");
 
 		if (frm.doc.content_calendar) {
 			frm.add_custom_button(__("View Content Calendar"), function() {
@@ -15,8 +36,8 @@ frappe.ui.form.on("Content Item", {
 			method: "oda_marketing.oda_marketing.doctype.content_item.content_item.get_ai_copilot_status",
 			callback: function(res) {
 				const enable_ai = res && res.message ? res.message.enable_ai_copilot : 0;
-				const max_writer_reviews = res && res.message ? res.message.max_writer_copilot_reviews_per_item : 3;
-				const max_reviewer_reviews = res && res.message ? res.message.max_reviewer_copilot_reviews_per_item : 3;
+				const max_writer_reviews = res && res.message ? res.message.max_writer_copilot_reviews_per_item : 2;
+				const max_reviewer_reviews = res && res.message ? res.message.max_reviewer_copilot_reviews_per_item : 2;
 				const is_writer = frappe.user.has_role("Content Writer");
 				const is_reviewer = frappe.user.has_role("Technical Reviewer");
 				const is_lead = frappe.user.has_role("Marketing Lead") || frappe.user.has_role("System Manager") || frappe.session.user === "Administrator";
@@ -45,7 +66,7 @@ frappe.ui.form.on("Content Item", {
 										args: { docname: frm.doc.name },
 										callback: function(r) {
 											frappe.hide_progress();
-											frappe.show_alert({ message: __("AI Copilot Review completed!"), indicator: "green" });
+											frappe.show_alert({ message: __("AI Copilot Review queued!"), indicator: "green" });
 											frm.reload_doc().then(() => {
 												frm.trigger("apply_role_field_permissions");
 												frm.refresh_fields();
@@ -86,7 +107,7 @@ frappe.ui.form.on("Content Item", {
 												},
 												callback: function(r) {
 													frappe.hide_progress();
-													frappe.show_alert({ message: __("Reviewer Copilot Review completed!"), indicator: "green" });
+													frappe.show_alert({ message: __("Reviewer Copilot Review queued!"), indicator: "green" });
 													frm.reload_doc().then(() => {
 														frm.trigger("apply_role_field_permissions");
 														frm.refresh_fields();
@@ -142,7 +163,7 @@ frappe.ui.form.on("Content Item", {
 
 		if (!is_lead) {
 			const metadata_fields = [
-				"title", "content_type", "topic", "practice_area",
+				"title", "content_type", "description", "industry_domain",
 				"content_calendar", "planned_publish_date", "assigned_to",
 				"reviewer_technical", "published_url", "risk_flag"
 			];
@@ -150,7 +171,7 @@ frappe.ui.form.on("Content Item", {
 
 			// Due Date is editable by Content Writer (carved out from metadata protection)
 			if (is_writer) {
-				frm.set_df_property("sla_due_date", "read_only", 0);
+				frm.set_df_property("due_date", "read_only", 0);
 			}
 
 			setTimeout(() => {
@@ -214,5 +235,35 @@ frappe.ui.form.on("Content Item", {
 		frm.refresh_field("ai_review_status");
 		frm.refresh_field("ai_copilot_feedback");
 		frm.refresh_field("ai_reviews");
+	},
+
+	validate(frm) {
+		const desc_val = frm.doc.description || frm.doc.topic;
+		if (desc_val && String(desc_val).trim().length > 500) {
+			const current_len = String(desc_val).trim().length;
+			frappe.msgprint(__("<b>Description</b> exceeds maximum limit of 500 characters. (Current length: {0} characters)", [current_len]));
+			frappe.validated = false;
+		}
+	},
+
+	description(frm) {
+		frm.trigger("update_description_inline_counter");
+	},
+
+	topic(frm) {
+		frm.trigger("update_description_inline_counter");
+	},
+
+	update_description_inline_counter(frm) {
+		const desc_val = frm.doc.description || frm.doc.topic;
+		const len = desc_val ? String(desc_val).trim().length : 0;
+		const target_field = frm.doc.description !== undefined ? "description" : "topic";
+		if (len > 500) {
+			frm.set_df_property(target_field, "description", `<b style="color: #dc2626; font-weight: 600;">Description exceeds 500 characters limit (${len}/500)</b>`);
+		} else if (len > 0) {
+			frm.set_df_property(target_field, "description", `<span style="color: #6b7280;">Character count: ${len}/500</span>`);
+		} else {
+			frm.set_df_property(target_field, "description", "Maximum 500 characters allowed");
+		}
 	}
 });

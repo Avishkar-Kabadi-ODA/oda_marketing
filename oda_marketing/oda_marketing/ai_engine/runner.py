@@ -24,10 +24,10 @@ def run_ai_review(docname, reviewer_instructions=None, review_type="Writer"):
 	# Check usage limit before starting review
 	settings = frappe.get_single("Marketing Settings")
 	if review_type == "Reviewer":
-		max_reviews = int(getattr(settings, "max_reviewer_copilot_reviews_per_item", 3) or 3)
+		max_reviews = int(getattr(settings, "max_reviewer_copilot_reviews_per_item", 2) or 2)
 		current_count = len([r for r in (doc.ai_reviews or []) if r.get("review_type") == "Reviewer"])
 	else:
-		max_reviews = int(getattr(settings, "max_writer_copilot_reviews_per_item", 3) or 3)
+		max_reviews = int(getattr(settings, "max_writer_copilot_reviews_per_item", 2) or 2)
 		current_count = len([r for r in (doc.ai_reviews or []) if r.get("review_type") == "Writer"])
 	if current_count >= max_reviews:
 		frappe.throw(
@@ -38,7 +38,6 @@ def run_ai_review(docname, reviewer_instructions=None, review_type="Writer"):
 	frappe.flags.in_ai_copilot_review = True
 
 	try:
-
 		# Mark status as In Progress
 		doc.db_set("ai_review_status", "In Progress", update_modified=False)
 
@@ -82,21 +81,10 @@ def run_ai_review(docname, reviewer_instructions=None, review_type="Writer"):
 			progress=100
 		)
 
-		doc.db_set({
-			"ai_score": score,
-			"ai_review_status": "Completed",
-			"ai_generated_prompt": dynamic_prompt,
-			"ai_copilot_feedback": feedback,
-		}, update_modified=False)
-
 		doc.flags.ignore_permissions = True
 		doc.flags.ignore_workflow = True
 		doc.flags.ignore_validate = True
 		doc.save(ignore_permissions=True)
-
-		# Send email notification to writer when AI score fails threshold
-		if score < passing_score:
-			notify_writer_copilot_failed(doc, score, feedback)
 
 		frappe.db.commit()
 
@@ -106,35 +94,3 @@ def run_ai_review(docname, reviewer_instructions=None, review_type="Writer"):
 		publish_stream_event(docname, None, f"AI Copilot Evaluation failed: {str(e)}", progress=0)
 	finally:
 		frappe.flags.in_ai_copilot_review = False
-
-
-def notify_writer_copilot_failed(doc, score, feedback):
-	"""Sends an automated alert to Content Writer when AI Copilot score is below threshold."""
-	settings = frappe.get_single("Marketing Settings")
-	if not settings.enable_email_notifications:
-		return
-
-	if not doc.assigned_to:
-		return
-
-	try:
-		item_url = doc.get_template_context().get("content_item_url")
-		subject = f"[COPILOT REVISION REQUIRED] Deliverable '{doc.title}' AI Quality Score: {score}%"
-		message = f"""<p>Hello <b>{doc.get_user_full_name(doc.assigned_to)}</b>,</p>
-<p>Your content deliverable <b>{doc.title}</b> has been evaluated by the <b>Marketing Copilot Agent</b>.</p>
-<p><b>AI Quality Score:</b> <span style="color: #dc2626; font-weight: bold;">{score}%</span></p>
-<p>The AI Copilot recommends revisions. Please review the feedback below, update your content draft, and resubmit when ready.</p>
-<div style="background-color: #f8fafc; border-left: 4px solid #3b82f6; padding: 15px; margin: 15px 0;">
-  {feedback}
-</div>
-<div style="margin-top: 15px;">
-  <a href="{item_url}" target="_blank" style="display: inline-block; background-color: #4F46E5; color: #ffffff; padding: 10px 18px; text-decoration: none; border-radius: 6px; font-weight: 600;">View Content Item in Desk</a>
-</div>"""
-		frappe.sendmail(
-			recipients=[doc.assigned_to],
-			subject=subject,
-			message=message,
-			now=False
-		)
-	except Exception as e:
-		frappe.log_error(f"Failed to send Copilot failure notification email for {doc.name}: {str(e)}")

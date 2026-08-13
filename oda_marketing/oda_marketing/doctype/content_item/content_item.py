@@ -9,6 +9,7 @@ from frappe.utils import add_days, getdate, nowdate, now_datetime, get_url
 
 class ContentItem(Document):
 	def validate(self):
+		self.validate_description_length()
 		self.validate_creation_permissions()
 		self.validate_metadata_edit_permissions()
 		self.validate_writer_readonly_before_briefed()
@@ -26,6 +27,17 @@ class ContentItem(Document):
 		if self.assigned_to:
 			self.owner = self.assigned_to
 		self.sync_status_with_workflow()
+		if not getattr(self, "reminder_1_days_before", None):
+			settings = frappe.get_single("Marketing Settings")
+			if getattr(settings, "sla_reminder_enabled", 0):
+				self.reminder_1_days_before = int(getattr(settings, "sla_reminder_days_before", 3) or 3)
+
+	def validate_description_length(self):
+		if self.description and len(str(self.description).strip()) > 500:
+			frappe.throw(
+				_("<b>Description</b> exceeds maximum limit of 500 characters. (Current length: {0} characters)").format(len(str(self.description).strip())),
+				frappe.ValidationError
+			)
 
 	def is_lead_user(self):
 		user = frappe.session.user
@@ -54,9 +66,9 @@ class ContentItem(Document):
 			before = self.get_doc_before_save()
 			if not before:
 				return
-			# sla_due_date is explicitly excluded — Content Writers can edit Due Date
+			# due_date is explicitly excluded — Content Writers can edit Due Date
 			metadata_fields = [
-				"title", "content_type", "topic", "practice_area",
+				"title", "content_type", "description", "industry_domain",
 				"content_calendar", "planned_publish_date", "assigned_to",
 				"reviewer_technical"
 			]
@@ -109,9 +121,9 @@ class ContentItem(Document):
 
 		# Forbidden metadata and draft attachment fields that Technical Reviewers cannot modify
 		forbidden_fields = [
-			"title", "content_type", "topic", "practice_area",
+			"title", "content_type", "description", "industry_domain",
 			"content_calendar", "planned_publish_date", "assigned_to",
-			"reviewer_technical", "published_url", "risk_flag", "sla_due_date",
+			"reviewer_technical", "published_url", "risk_flag", "due_date",
 			"content_file_1", "content_file_2", "content_file_3", "notes"
 		]
 
@@ -119,7 +131,7 @@ class ContentItem(Document):
 			val_self = getattr(self, fieldname, None)
 			val_before = getattr(before, fieldname, None)
 
-			if fieldname in ["planned_publish_date", "sla_due_date"]:
+			if fieldname in ["planned_publish_date", "due_date"]:
 				if val_self and val_before and getdate(val_self) != getdate(val_before):
 					frappe.throw(
 						_("Technical Reviewers cannot edit item metadata or attachments (<b>{0}</b>). Only revision feedback, copilot instructions, and workflow actions can be modified.").format(self.meta.get_label(fieldname) or fieldname),
@@ -149,9 +161,11 @@ class ContentItem(Document):
 				frappe.throw(_("Planned Publish Date ({0}) cannot be after Content Calendar end date ({1}).").format(self.planned_publish_date, cal.to_date))
 
 	def check_overdue_sla(self):
-		if self.sla_due_date and getattr(self, "workflow_state", None) not in ["Approved", "Published"]:
-			if getdate(nowdate()) > getdate(self.sla_due_date):
-				self.risk_flag = "Late"
+		settings = frappe.get_single("Marketing Settings")
+		if getattr(settings, "enable_auto_overdue_flag", 0):
+			if self.due_date and getattr(self, "workflow_state", None) not in ["Approved", "Published"]:
+				if getdate(nowdate()) > getdate(self.due_date):
+					self.risk_flag = "Late"
 
 	def validate_primary_attachment_mandatory(self):
 		target_states = ["In Review", "Approved", "Published"]
@@ -218,35 +232,6 @@ class ContentItem(Document):
 	def on_update(self):
 		self.trigger_workflow_notifications()
 		self.trigger_system_notifications()
-		self.trigger_ai_copilot_review()
-
-	def trigger_ai_copilot_review(self):
-		if getattr(frappe.flags, "in_ai_copilot_review", False):
-			return
-
-		settings = frappe.get_single("Marketing Settings")
-		if not getattr(settings, "enable_ai_copilot", 0):
-			return
-
-		if getattr(self, "workflow_state", None) == "Marketing Copilot Review":
-			if getattr(self, "ai_review_status", None) not in ["In Progress", "Completed", "Queued"]:
-				# Check usage limit before queuing (Writer limit)
-				max_reviews = int(getattr(settings, "max_writer_copilot_reviews_per_item", 3) or 3)
-				current_count = len([r for r in (self.ai_reviews or []) if r.get("review_type") == "Writer"])
-				if current_count >= max_reviews:
-					frappe.msgprint(
-						_("Writer Copilot review limit reached ({0}/{1}). No additional AI reviews will be triggered.").format(current_count, max_reviews),
-						indicator="orange",
-						alert=True
-					)
-					return
-
-				self.db_set("ai_review_status", "Queued", update_modified=False)
-				try:
-					from oda_marketing.oda_marketing.ai_engine.runner import run_ai_review
-					run_ai_review(self.name, review_type="Writer")
-				except Exception as e:
-					frappe.log_error(f"AI Copilot review execution error for {self.name}: {str(e)}")
 
 	def trigger_system_notifications(self):
 		"""Sends targeted Frappe In-App Bell 🔔 Notifications to the specific user involved."""
@@ -376,28 +361,41 @@ class ContentItem(Document):
 
 
 def send_overdue_sla_notifications():
-	"""Scheduled job to alert involved parties for late items and upcoming due dates."""
+	"""Scheduled job to alert involved parties for late items and upcoming due dates (Restricted to Business Hours)."""
 	settings = frappe.get_single("Marketing Settings")
 	if not settings.enable_email_notifications:
 		return
 
-	template_name = settings.overdue_sla_email_template
+	today = getdate(nowdate())
+
+	# Execute email dispatch ONCE per day at Business Hours Start (default 9 AM / 09:00)
+	current_hour = frappe.utils.now_datetime().hour
+	start_hour = int(getattr(settings, "business_hours_start", 9) or 9)
+
+	if current_hour != start_hour:
+		return
+
+	template_name = getattr(settings, "overdue_email_template", None) or getattr(settings, "overdue_sla_email_template", None)
 	if not (template_name and frappe.db.exists("Email Template", template_name)):
 		return
 
 	tmpl = frappe.get_doc("Email Template", template_name)
 
-	# Send alerts for overdue (Late) items
+	# Send alerts for overdue (Late) items (deduplicated by last_overdue_notified_on)
 	overdue_items = frappe.get_all(
 		"Content Item",
 		filters={
 			"risk_flag": "Late",
 			"workflow_state": ["not in", ["Approved", "Published"]]
 		},
-		fields=["name"]
+		fields=["name", "last_overdue_notified_on"]
 	)
 
 	for item_data in overdue_items:
+		# Prevent daily duplicate emails if already notified today
+		if item_data.last_overdue_notified_on and getdate(item_data.last_overdue_notified_on) == today:
+			continue
+
 		item = frappe.get_doc("Content Item", item_data.name)
 		recipients = set()
 		if item.assigned_to:
@@ -417,54 +415,83 @@ def send_overdue_sla_notifications():
 					message=message,
 					now=True
 				)
+				item.db_set("last_overdue_notified_on", today, update_modified=False)
 			except Exception as e:
 				frappe.log_error(f"Failed to send overdue email for {item.name}: {str(e)}")
 
-	# Send reminder notifications for items approaching due date
+	# Send reminder notifications for items approaching due date (Up to 3 reminders: Marketing Settings default + 2 content-level)
 	sla_reminder_enabled = getattr(settings, "sla_reminder_enabled", 0)
-	if not sla_reminder_enabled:
-		return
 
-	days_before = int(getattr(settings, "sla_reminder_days_before", 3) or 3)
-	reminder_date = add_days(nowdate(), days_before)
-
-	upcoming_items = frappe.get_all(
+	active_items = frappe.get_all(
 		"Content Item",
 		filters={
-			"sla_due_date": ["between", [nowdate(), reminder_date]],
 			"risk_flag": ["!=", "Late"],
 			"workflow_state": ["not in", ["Approved", "Published"]]
 		},
-		fields=["name"]
+		fields=["name", "due_date", "reminder_1_days_before", "reminder_2_days_before"]
 	)
 
-	for item_data in upcoming_items:
-		item = frappe.get_doc("Content Item", item_data.name)
-		recipients = set()
-		if item.assigned_to:
-			recipients.add(item.assigned_to)
-		if item.reviewer_technical:
-			recipients.add(item.reviewer_technical)
+	default_days_before = int(getattr(settings, "sla_reminder_days_before", 3) or 3) if sla_reminder_enabled else None
 
-		if recipients:
-			try:
-				ctx = item.get_template_context()
-				subject = f"[REMINDER] Deliverable '{item.title}' due date approaching ({item.sla_due_date})"
-				message = frappe.render_template(tmpl.response, ctx)
+	# Dedicated Due Date Reminder template fallback
+	reminder_template_name = "Marketing Due Date Reminder" if frappe.db.exists("Email Template", "Marketing Due Date Reminder") else template_name
+	reminder_tmpl = frappe.get_doc("Email Template", reminder_template_name) if reminder_template_name else tmpl
 
-				frappe.sendmail(
-					recipients=list(recipients),
-					subject=subject,
-					message=message,
-					now=True
-				)
-			except Exception as e:
-				frappe.log_error(f"Failed to send reminder email for {item.name}: {str(e)}")
+	for item_data in active_items:
+		if not item_data.due_date:
+			continue
+
+		due_date = getdate(item_data.due_date)
+
+		# Collect up to 3 reminder day offsets
+		reminder_offsets = set()
+		if default_days_before is not None:
+			reminder_offsets.add(default_days_before)
+		if item_data.reminder_1_days_before:
+			reminder_offsets.add(int(item_data.reminder_1_days_before))
+		if item_data.reminder_2_days_before:
+			reminder_offsets.add(int(item_data.reminder_2_days_before))
+
+		# Check if today matches any of the reminder dates
+		should_remind = False
+		matched_days = None
+		for days in sorted(reminder_offsets):
+			rem_date = add_days(due_date, -days)
+			if getdate(rem_date) == today:
+				should_remind = True
+				matched_days = days
+				break
+
+		if should_remind:
+			item = frappe.get_doc("Content Item", item_data.name)
+			recipients = set()
+			if item.assigned_to:
+				recipients.add(item.assigned_to)
+			if item.reviewer_technical:
+				recipients.add(item.reviewer_technical)
+
+			if recipients:
+				try:
+					ctx = item.get_template_context()
+					ctx["matched_days"] = matched_days
+					subject = frappe.render_template(reminder_tmpl.subject, ctx)
+					message = frappe.render_template(reminder_tmpl.response, ctx)
+
+					frappe.sendmail(
+						recipients=list(recipients),
+						subject=subject,
+						message=message,
+						now=True
+					)
+				except Exception as e:
+					frappe.log_error(f"Failed to send reminder email for {item.name}: {str(e)}")
+
+	frappe.db.commit()
 
 
 @frappe.whitelist()
 def trigger_ai_copilot(docname):
-	"""Manual API trigger for Marketing Copilot Review (Writer)."""
+	"""Manual API trigger for Marketing Copilot Review (Writer) via Background Job Enqueueing."""
 	if not frappe.db.exists("Content Item", docname):
 		frappe.throw(_("Content Item {0} not found.").format(docname), frappe.DoesNotExistError)
 
@@ -487,7 +514,7 @@ def trigger_ai_copilot(docname):
 		)
 
 	# Check usage limit for Writer
-	max_reviews = int(getattr(settings, "max_writer_copilot_reviews_per_item", 3) or 3)
+	max_reviews = int(getattr(settings, "max_writer_copilot_reviews_per_item", 2) or 2)
 	current_count = len([r for r in (doc.ai_reviews or []) if r.get("review_type") == "Writer"])
 	if current_count >= max_reviews:
 		frappe.throw(
@@ -495,14 +522,20 @@ def trigger_ai_copilot(docname):
 			frappe.ValidationError
 		)
 
-	from oda_marketing.oda_marketing.ai_engine.runner import run_ai_review
-	run_ai_review(docname, review_type="Writer")
+	frappe.enqueue(
+		"oda_marketing.oda_marketing.ai_engine.runner.run_ai_review",
+		queue="long",
+		timeout=300,
+		docname=docname,
+		review_type="Writer"
+	)
+	doc.db_set("ai_review_status", "Queued", update_modified=False)
 	return frappe.get_doc("Content Item", docname)
 
 
 @frappe.whitelist()
 def trigger_reviewer_copilot(docname, instructions=None):
-	"""Reviewer-triggered Copilot review with custom instructions."""
+	"""Reviewer-triggered Copilot review with custom instructions via Background Job Enqueueing."""
 	if not frappe.db.exists("Content Item", docname):
 		frappe.throw(_("Content Item {0} not found.").format(docname), frappe.DoesNotExistError)
 
@@ -525,7 +558,7 @@ def trigger_reviewer_copilot(docname, instructions=None):
 		)
 
 	# Check usage limit for Reviewer
-	max_reviews = int(getattr(settings, "max_reviewer_copilot_reviews_per_item", 3) or 3)
+	max_reviews = int(getattr(settings, "max_reviewer_copilot_reviews_per_item", 2) or 2)
 	current_count = len([r for r in (doc.ai_reviews or []) if r.get("review_type") == "Reviewer"])
 	if current_count >= max_reviews:
 		frappe.throw(
@@ -537,8 +570,15 @@ def trigger_reviewer_copilot(docname, instructions=None):
 	if instructions:
 		doc.db_set("reviewer_copilot_instructions", instructions, update_modified=False)
 
-	from oda_marketing.oda_marketing.ai_engine.runner import run_ai_review
-	run_ai_review(docname, reviewer_instructions=instructions, review_type="Reviewer")
+	frappe.enqueue(
+		"oda_marketing.oda_marketing.ai_engine.runner.run_ai_review",
+		queue="long",
+		timeout=300,
+		docname=docname,
+		reviewer_instructions=instructions,
+		review_type="Reviewer"
+	)
+	doc.db_set("ai_review_status", "Queued", update_modified=False)
 	return frappe.get_doc("Content Item", docname)
 
 
@@ -549,8 +589,8 @@ def get_ai_copilot_status():
 		settings = frappe.get_single("Marketing Settings")
 		return {
 			"enable_ai_copilot": int(getattr(settings, "enable_ai_copilot", 0) or 0),
-			"max_writer_copilot_reviews_per_item": int(getattr(settings, "max_writer_copilot_reviews_per_item", 3) or 3),
-			"max_reviewer_copilot_reviews_per_item": int(getattr(settings, "max_reviewer_copilot_reviews_per_item", 3) or 3)
+			"max_writer_copilot_reviews_per_item": int(getattr(settings, "max_writer_copilot_reviews_per_item", 2) or 2),
+			"max_reviewer_copilot_reviews_per_item": int(getattr(settings, "max_reviewer_copilot_reviews_per_item", 2) or 2)
 		}
 	except Exception:
-		return {"enable_ai_copilot": 0, "max_writer_copilot_reviews_per_item": 3, "max_reviewer_copilot_reviews_per_item": 3}
+		return {"enable_ai_copilot": 0, "max_writer_copilot_reviews_per_item": 2, "max_reviewer_copilot_reviews_per_item": 2}

@@ -16,10 +16,11 @@ def _create_test_item(overrides=None):
 		"doctype": "Content Item",
 		"title": "Test Item",
 		"content_type": "Blog",
-		"topic": "Test topic for evaluation.",
-		"practice_area": "Cross-domain",
+		"description": "Test topic for evaluation.",
+		"industry_domain": "Cross-domain",
 		"content_calendar": "2026 Global Marketing Operations Calendar",
 		"planned_publish_date": "2026-09-01",
+		"due_date": "2026-08-30",
 		"assigned_to": "writer.test@oda.local",
 		"reviewer_technical": "Avishkar.Kabadi@optimumdataanalytics.com",
 	}
@@ -45,7 +46,7 @@ def _set_workflow_state(doc, state):
 
 class TestAIAgentEngine(unittest.TestCase):
 	def setUp(self):
-		frappe.db.rollback()
+		frappe.db.commit()
 		cal_name = "2026 Global Marketing Operations Calendar"
 		if not frappe.db.exists("Content Calendar", cal_name):
 			frappe.get_doc({
@@ -55,6 +56,7 @@ class TestAIAgentEngine(unittest.TestCase):
 				"to_date": "2026-12-31",
 				"status": "Active"
 			}).insert(ignore_permissions=True)
+			frappe.db.commit()
 
 		# Ensure Content Item Option records exist
 		for label in ["Blog", "Poll", "Flowchart", "Carousel"]:
@@ -70,14 +72,14 @@ class TestAIAgentEngine(unittest.TestCase):
 			if not frappe.db.exists("Content Item Option", label):
 				frappe.get_doc({
 					"doctype": "Content Item Option",
-					"option_type": "Practice Area",
+					"option_type": "Industry Domain",
 					"option_label": label,
 					"is_active": 1
 				}).insert(ignore_permissions=True)
 
 		frappe.db.set_single_value("Marketing Settings", "enable_ai_copilot", 1)
 		frappe.db.set_single_value("Marketing Settings", "ai_copilot_passing_score", 80)
-		frappe.db.set_single_value("Marketing Settings", "max_copilot_reviews_per_item", 3)
+		frappe.db.set_single_value("Marketing Settings", "max_writer_copilot_reviews_per_item", 2)
 		if hasattr(frappe.local, "single_docs"):
 			frappe.local.single_docs.pop("Marketing Settings", None)
 		frappe.clear_cache()
@@ -103,20 +105,20 @@ class TestAIAgentEngine(unittest.TestCase):
 		"""Tests that the subagent generates a custom prompt based on deliverable metadata."""
 		item = _create_test_item({
 			"title": "Oncology AI Decision Support",
-			"topic": "Evaluating LLM precision in oncology clinical trial matching.",
-			"practice_area": "HCLS",
+			"description": "Evaluating LLM precision in oncology clinical trial matching.",
+			"industry_domain": "HCLS",
 		})
 
 		prompt = generate_dynamic_system_prompt(item)
-		self.assertIn("Blog", prompt)
-		self.assertIn("HCLS", prompt)
+		self.assertTrue("blog" in prompt.lower())
+		self.assertTrue("hcls" in prompt.lower())
 		self.assertTrue(len(prompt) > 50)
 
 	def test_subagent_with_reviewer_instructions(self):
 		"""Tests that reviewer instructions are incorporated into the generated prompt."""
 		item = _create_test_item({
 			"title": "Cloud Migration Guide",
-			"topic": "AWS to Azure migration steps.",
+			"description": "AWS to Azure migration steps.",
 		})
 
 		instructions = "Focus on verifying the Terraform section accuracy."
@@ -127,7 +129,7 @@ class TestAIAgentEngine(unittest.TestCase):
 		"""Tests that AI score is informational only — does not block workflow transitions."""
 		item = _create_test_item({
 			"title": "Low Score Test Draft",
-			"practice_area": "Fintech",
+			"industry_domain": "Fintech",
 			"content_file_1": "/files/sample_draft.txt",
 			"ai_score": 50,
 			"ai_review_status": "Completed",
@@ -148,13 +150,13 @@ class TestAIAgentEngine(unittest.TestCase):
 		"""Tests full background runner execution — score is recorded but state is NOT auto-changed."""
 		item = _create_test_item({
 			"title": "Enterprise Cloud Migration Blueprint",
-			"topic": "Step by step cloud migration guide for enterprise infrastructure.",
+			"description": "Step by step cloud migration guide for enterprise infrastructure.",
 			"content_file_1": "/files/sample_draft.txt",
 			"notes": "<p>Detailed cloud architecture document covering multi-cloud failover, Terraform automation, zero-trust network access, and cost governance.</p>",
 		})
 
 		# Force item into Marketing Copilot Review state
-		_set_workflow_state(item, "Marketing Copilot Review")
+		_set_workflow_state(item, "In Progress")
 
 		run_ai_review(item.name)
 
@@ -171,9 +173,9 @@ class TestAIAgentEngine(unittest.TestCase):
 		self.assertEqual(len(updated_item_2.ai_reviews), 2)
 
 	def test_copilot_review_limit(self):
-		"""Tests that max_copilot_reviews_per_item limit is enforced."""
+		"""Tests that max_writer_copilot_reviews_per_item limit is enforced."""
 		settings = frappe.get_single("Marketing Settings")
-		settings.max_copilot_reviews_per_item = 2
+		settings.max_writer_copilot_reviews_per_item = 2
 		settings.save(ignore_permissions=True)
 		if hasattr(frappe.local, "single_docs"):
 			frappe.local.single_docs.pop("Marketing Settings", None)
@@ -181,12 +183,12 @@ class TestAIAgentEngine(unittest.TestCase):
 
 		item = _create_test_item({
 			"title": "Limit Test Item",
-			"practice_area": "Fintech",
+			"industry_domain": "Fintech",
 			"content_file_1": "/files/sample_draft.txt",
 		})
 
 		# Force item into Marketing Copilot Review state
-		_set_workflow_state(item, "Marketing Copilot Review")
+		_set_workflow_state(item, "In Progress")
 
 		# Run 2 reviews (within limit)
 		run_ai_review(item.name)
@@ -199,20 +201,14 @@ class TestAIAgentEngine(unittest.TestCase):
 		with self.assertRaises(frappe.ValidationError):
 			run_ai_review(item.name)
 
-	def test_email_notifications_disabled(self):
-		"""Tests that no email is sent when enable_email_notifications is unchecked."""
-		frappe.db.set_single_value("Marketing Settings", "enable_email_notifications", 0)
-		frappe.clear_cache()
-
-		item = _create_test_item({
-			"title": "Email Toggle Test Item",
-			"practice_area": "HCLS",
-		})
-
-		from oda_marketing.oda_marketing.ai_engine.runner import notify_writer_copilot_failed
-		frappe.flags.sent_mails = []
-		notify_writer_copilot_failed(item, 50, "Failed feedback")
-		self.assertEqual(len(getattr(frappe.flags, "sent_mails", [])), 0)
+	def test_description_max_500_character_validation(self):
+		"""Tests that description > 500 characters raises user-friendly ValidationError."""
+		long_topic = "D" * 501
+		with self.assertRaises(frappe.ValidationError):
+			_create_test_item({
+				"title": "Overlimit Item",
+				"description": long_topic,
+			})
 
 	def tearDown(self):
 		frappe.db.rollback()

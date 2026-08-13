@@ -7,3 +7,4 @@
 oda_marketing.patches.v1_1.create_content_item_options
 oda_marketing.patches.v1_1.rename_workflow_state_in_review
 oda_marketing.patches.v1_1.remove_sharepoint_field
+oda_marketing.patches.v1_2.rename_fields_to_match_labels

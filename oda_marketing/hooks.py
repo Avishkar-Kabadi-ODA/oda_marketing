@@ -31,9 +31,9 @@ has_permission = {
 	"Content Item": "oda_marketing.permissions.has_content_item_permission",
 }
 
-# Scheduled Events (Overdue SLA Engine)
+# Scheduled Events (Overdue SLA Engine & Reminders)
 scheduler_events = {
-	"daily": [
+	"hourly": [
 		"oda_marketing.oda_marketing.doctype.content_item.content_item.send_overdue_sla_notifications"
 	]
 }

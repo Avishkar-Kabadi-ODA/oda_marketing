@@ -1,113 +1,79 @@
 {
  "actions": [],
- "autoname": "format:CC-{YYYY}-{MM}-{###}",
+ "autoname": "field:calendar_name",
  "creation": "2026-07-30 18:15:00",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "title",
-  "year",
-  "month",
-  "column_break_1",
+  "calendar_name",
   "status",
-  "owner_user",
+  "column_break_1",
+  "from_date",
+  "to_date",
   "description_section",
-  "description",
-  "slots_section",
-  "slots",
-  "amended_from"
+  "description"
  ],
  "fields": [
   {
-   "fieldname": "title",
+   "fieldname": "calendar_name",
    "fieldtype": "Data",
    "in_global_search": 1,
    "in_list_view": 1,
-   "label": "Title",
-   "reqd": 1
+   "label": "Calendar Name",
+   "reqd": 1,
+   "unique": 1
   },
   {
-   "default": "2026",
-   "fieldname": "year",
+   "default": "Active",
+   "fieldname": "status",
    "fieldtype": "Select",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Year",
-   "options": "2025\n2026\n2027\n2028",
-   "reqd": 1
-  },
-  {
-   "fieldname": "month",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Month",
-   "options": "January\nFebruary\nMarch\nApril\nMay\nJune\nJuly\nAugust\nSeptember\nOctober\nNovember\nDecember",
-   "reqd": 1
+   "label": "Status",
+   "options": "Active\nInactive"
   },
   {
    "fieldname": "column_break_1",
    "fieldtype": "Column Break"
   },
   {
-   "default": "Draft",
-   "fieldname": "status",
-   "fieldtype": "Select",
+   "fieldname": "from_date",
+   "fieldtype": "Date",
    "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Status",
-   "options": "Draft\nApproved\nCancelled",
-   "read_only": 1
+   "label": "Start Date",
+   "reqd": 1
   },
   {
-   "fieldname": "owner_user",
-   "fieldtype": "Link",
+   "fieldname": "to_date",
+   "fieldtype": "Date",
    "in_list_view": 1,
-   "label": "Owner / Lead",
-   "options": "User"
+   "label": "End Date",
+   "reqd": 1
   },
   {
    "fieldname": "description_section",
    "fieldtype": "Section Break",
-   "label": "Overview & Objectives"
+   "label": "Description & Notes"
   },
   {
    "fieldname": "description",
    "fieldtype": "Text",
    "label": "Description"
-  },
-  {
-   "fieldname": "slots_section",
-   "fieldtype": "Section Break",
-   "label": "Planned Calendar Slots"
-  },
-  {
-   "fieldname": "slots",
-   "fieldtype": "Table",
-   "label": "Calendar Slots",
-   "options": "Calendar Slot",
-   "reqd": 1
-  },
-  {
-   "fieldname": "amended_from",
-   "fieldtype": "Link",
-   "label": "Amended From",
-   "no_copy": 1,
-   "options": "Content Calendar",
-   "print_hide": 1,
-   "read_only": 1,
-   "search_index": 1
   }
  ],
  "icon": "octicon octicon-calendar",
  "idx": 0,
- "is_submittable": 1,
- "links": [],
- "modified": "2026-07-30 18:15:00",
+ "links": [
+  {
+   "link_doctype": "Content Item",
+   "link_fieldname": "content_calendar"
+  }
+ ],
+ "modified": "2026-08-03 00:05:00",
  "modified_by": "Administrator",
  "module": "ODA Marketing",
  "name": "Content Calendar",
- "naming_rule": "Expression (old style)",
+ "naming_rule": "By fieldname",
  "owner": "Administrator",
  "permissions": [
   {
@@ -120,7 +86,6 @@
    "report": 1,
    "role": "System Manager",
    "share": 1,
-   "submit": 1,
    "write": 1
   },
   {
@@ -131,42 +96,39 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Marketing Manager",
-   "share": 1,
-   "submit": 1,
-   "write": 1
-  },
-  {
-   "create": 1,
-   "delete": 0,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
    "role": "Marketing Lead",
    "share": 1,
-   "submit": 1,
    "write": 1
   },
   {
-   "create": 1,
+   "create": 0,
    "delete": 0,
    "email": 1,
    "export": 1,
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Marketing User",
+   "role": "Content Writer",
    "share": 1,
-   "submit": 0,
-   "write": 1
+   "write": 0
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Technical Reviewer",
+   "share": 1,
+   "write": 0
   }
  ],
- "search_fields": "title, year, month",
- "sort_field": "creation",
+ "search_fields": "calendar_name",
+ "sort_field": "from_date",
  "sort_order": "DESC",
  "states": [],
- "title_field": "title",
+ "title_field": "calendar_name",
  "track_changes": 1
 }

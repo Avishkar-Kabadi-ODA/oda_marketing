@@ -1,29 +1,50 @@
 {
  "actions": [],
- "autoname": "format:CI-{YYYY}-{#####}",
+ "autoname": "naming_series:",
  "creation": "2026-07-30 18:15:00",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
+  "naming_series",
   "title",
-  "content_type",
-  "workflow_state",
   "status",
+  "content_type",
+  "topic",
+  "practice_area",
   "column_break_1",
-  "channel",
-  "planned_publish_date",
-  "actual_publish_date",
-  "assigned_owner",
-  "link_section",
   "content_calendar",
-  "calendar_slot",
-  "column_break_2",
-  "content_brief",
+  "planned_publish_date",
+  "sla_due_date",
+  "risk_flag",
+  "assigned_to",
+  "reviewer_technical",
+  "brief_accepted_on",
+  "published_url",
   "content_section",
-  "content_body",
-  "publication_url"
+  "content_file_1",
+  "content_file_2",
+  "content_file_3",
+  "notes_section",
+  "notes",
+  "feedback_section",
+  "revision_feedback_notes",
+  "reviewer_copilot_instructions",
+  "ai_section",
+  "ai_score",
+  "ai_review_status",
+  "ai_copilot_feedback",
+  "ai_generated_prompt",
+  "ai_reviews"
  ],
  "fields": [
+  {
+   "default": "MKT-ITEM-.YYYY.-.####",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Naming Series",
+   "options": "MKT-ITEM-.YYYY.-.####",
+   "reqd": 1
+  },
   {
    "fieldname": "title",
    "fieldtype": "Data",
@@ -33,113 +54,204 @@
    "reqd": 1
   },
   {
-   "fieldname": "content_type",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Content Type",
-   "options": "Blog Post\nSocial Post\nNewsletter\nCase Study\nVideo\nWebinar\nWhitepaper",
-   "reqd": 1
-  },
-  {
-   "fieldname": "workflow_state",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Workflow State",
-   "read_only": 1
-  },
-  {
    "default": "Planned",
    "fieldname": "status",
    "fieldtype": "Select",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Status",
-   "options": "Planned\nBriefing\nDrafting\nIn Review\nRevisions\nApproved\nScheduled\nPublished"
+   "options": "Planned\nBriefed\nIn Progress\nIn Review\nIn Revision\nApproved\nPublished",
+   "read_only": 1
+  },
+  {
+   "fieldname": "content_type",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Format",
+   "options": "Content Item Option",
+   "reqd": 1,
+   "link_filters": "[[\"Content Item Option\", \"option_type\", \"=\", \"Format\"], [\"Content Item Option\", \"is_active\", \"=\", 1]]"
+  },
+  {
+   "fieldname": "topic",
+   "fieldtype": "Small Text",
+   "label": "Topic",
+   "reqd": 1
+  },
+  {
+   "fieldname": "practice_area",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Practice Area",
+   "options": "Content Item Option",
+   "link_filters": "[[\"Content Item Option\", \"option_type\", \"=\", \"Practice Area\"], [\"Content Item Option\", \"is_active\", \"=\", 1]]"
   },
   {
    "fieldname": "column_break_1",
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "channel",
-   "fieldtype": "Select",
+   "fieldname": "content_calendar",
+   "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Channel",
-   "options": "LinkedIn\nTwitter/X\nWebsite\nEmail\nYouTube\nMedium"
+   "label": "Content Calendar",
+   "options": "Content Calendar",
+   "reqd": 1
   },
   {
    "fieldname": "planned_publish_date",
    "fieldtype": "Date",
    "in_list_view": 1,
-   "label": "Planned Publish Date"
+   "label": "Planned Publish Date",
+   "reqd": 1
   },
   {
-   "fieldname": "actual_publish_date",
-   "fieldtype": "Date",
-   "label": "Actual Publish Date"
-  },
-  {
-   "fieldname": "assigned_owner",
+   "fieldname": "assigned_to",
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Assigned Owner",
+   "label": "Assigned To",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "fieldname": "reviewer_technical",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Reviewer",
    "options": "User"
   },
   {
-   "fieldname": "link_section",
+   "fieldname": "content_section",
    "fieldtype": "Section Break",
-   "label": "Calendar & Brief Reference"
+   "label": "Content Drafts & Attachments"
   },
   {
-   "fieldname": "content_calendar",
-   "fieldtype": "Link",
-   "in_standard_filter": 1,
-   "label": "Content Calendar",
-   "options": "Content Calendar"
+   "fieldname": "content_file_1",
+   "fieldtype": "Attach",
+   "in_list_view": 1,
+   "label": "Primary Content Draft (Mandatory for Review)"
   },
   {
-   "fieldname": "calendar_slot",
-   "fieldtype": "Data",
-   "label": "Calendar Slot ID"
+   "fieldname": "content_file_2",
+   "fieldtype": "Attach",
+   "label": "Supporting Asset 1 (Optional)"
+  },
+  {
+   "fieldname": "content_file_3",
+   "fieldtype": "Attach",
+   "label": "Supporting Asset 2 (Optional)"
   },
   {
    "fieldname": "column_break_2",
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "content_brief",
-   "fieldtype": "Link",
-   "label": "Content Brief",
-   "options": "Content Brief"
+   "fieldname": "sla_due_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Due Date"
   },
   {
-   "fieldname": "content_section",
-   "fieldtype": "Section Break",
-   "label": "Content Execution"
+   "default": "On track",
+   "fieldname": "risk_flag",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Risk Status",
+   "options": "On track\nAt risk\nLate"
   },
   {
-   "fieldname": "content_body",
-   "fieldtype": "Text Editor",
-   "label": "Content Body / Copy"
-  },
-  {
-   "fieldname": "publication_url",
+   "fieldname": "published_url",
    "fieldtype": "Data",
-   "label": "Publication URL"
+   "label": "Published URL",
+   "options": "URL"
+  },
+  {
+   "fieldname": "brief_accepted_on",
+   "fieldtype": "Datetime",
+   "label": "Brief Accepted On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "feedback_section",
+   "fieldtype": "Section Break",
+   "label": "Feedback & Revisions"
+  },
+  {
+   "fieldname": "revision_feedback_notes",
+   "fieldtype": "Small Text",
+   "label": "Revision Feedback / Notes"
+  },
+  {
+   "depends_on": "eval:doc.reviewer_copilot_instructions",
+   "fieldname": "reviewer_copilot_instructions",
+   "fieldtype": "Small Text",
+   "label": "Reviewer Instructions for Copilot"
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Working Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Text Editor",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "ai_section",
+   "fieldtype": "Section Break",
+   "label": "Copilot Evaluation"
+  },
+  {
+   "fieldname": "ai_score",
+   "fieldtype": "Percent",
+   "in_list_view": 1,
+   "label": "AI Quality Score (%)",
+   "read_only": 1
+  },
+  {
+   "default": "Not Started",
+   "fieldname": "ai_review_status",
+   "fieldtype": "Select",
+   "label": "AI Evaluation Status",
+   "options": "Not Started\nQueued\nIn Progress\nCompleted\nFailed",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.ai_copilot_feedback && (frappe.session.user === doc.assigned_to || frappe.session.user === doc.owner || frappe.user.has_role('Marketing Lead') || frappe.user.has_role('System Manager') || frappe.session.user === 'Administrator')",
+   "fieldname": "ai_copilot_feedback",
+   "fieldtype": "Text Editor",
+   "label": "AI Copilot Feedback & Improvements",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:false",
+   "fieldname": "ai_generated_prompt",
+   "fieldtype": "Code",
+   "hidden": 1,
+   "label": "Generated System Prompt",
+   "read_only": 1
+  },
+  {
+   "fieldname": "ai_reviews",
+   "fieldtype": "Table",
+   "label": "Copilot Review History",
+   "options": "Content Item AI Review",
+   "read_only": 1
   }
  ],
- "icon": "list-checks",
+ "icon": "tickets",
  "idx": 0,
  "links": [],
- "modified": "2026-07-30 18:15:00",
+ "modified": "2026-08-05 18:00:00",
  "modified_by": "Administrator",
  "module": "ODA Marketing",
  "name": "Content Item",
- "naming_rule": "Expression (old style)",
+ "naming_rule": "By \"Naming Series\" field",
  "owner": "Administrator",
  "permissions": [
   {
@@ -162,39 +274,68 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Marketing Manager",
-   "share": 1,
-   "write": 1
-  },
-  {
-   "create": 1,
-   "delete": 0,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
    "role": "Marketing Lead",
    "share": 1,
    "write": 1
   },
   {
-   "create": 1,
+   "create": 0,
    "delete": 0,
    "email": 1,
    "export": 1,
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Marketing User",
+   "role": "Content Writer",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Technical Reviewer",
    "share": 1,
    "write": 1
   }
  ],
- "search_fields": "title, content_type, channel",
- "sort_field": "creation",
+ "search_fields": "title, content_type, topic, status",
+ "sort_field": "planned_publish_date",
  "sort_order": "DESC",
- "states": [],
+ "states": [
+  {
+   "color": "Gray",
+   "title": "Planned"
+  },
+  {
+   "color": "Blue",
+   "title": "Briefed"
+  },
+  {
+   "color": "Orange",
+   "title": "In Progress"
+  },
+  {
+   "color": "Yellow",
+   "title": "In Review"
+  },
+  {
+   "color": "Red",
+   "title": "In Revision"
+  },
+  {
+   "color": "Cyan",
+   "title": "Approved"
+  },
+  {
+   "color": "Green",
+   "title": "Published"
+  }
+ ],
  "title_field": "title",
  "track_changes": 1,
  "track_seen": 1

@@ -1,0 +1,256 @@
+{
+ "actions": [],
+ "creation": "2026-08-03 08:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+"field_order": [
+   "email_notifications_section",
+   "enable_email_notifications",
+   "enable_auto_overdue_flag",
+   "default_sla_lead_days",
+   "column_break_1",
+   "default_publisher",
+   "default_content_calendar",
+   "sla_reminder_section",
+   "sla_reminder_enabled",
+   "sla_reminder_days_before",
+   "templates_section",
+   "writer_email_template",
+   "reviewer_email_template",
+   "column_break_2",
+   "publisher_email_template",
+   "published_email_template",
+   "overdue_sla_email_template",
+   "ai_copilot_section",
+   "enable_ai_copilot",
+   "ai_copilot_passing_score",
+   "max_writer_copilot_reviews_per_item",
+   "max_reviewer_copilot_reviews_per_item",
+   "ai_provider",
+   "ai_api_key_var",
+   "ai_endpoint_var",
+   "ai_model_name",
+   "subagent_meta_prompt",
+   "evaluator_default_prompt"
+  ],
+ "fields": [
+  {
+   "fieldname": "email_notifications_section",
+   "fieldtype": "Section Break",
+   "label": "Master Switches & Operational Defaults"
+  },
+  {
+   "default": "0",
+   "fieldname": "enable_email_notifications",
+   "fieldtype": "Check",
+   "label": "Enable Email Notifications"
+  },
+  {
+   "default": "0",
+   "fieldname": "enable_auto_overdue_flag",
+   "fieldtype": "Check",
+   "label": "Enable Automatic Overdue Risk Flagging"
+  },
+  {
+   "default": "14",
+   "fieldname": "default_sla_lead_days",
+   "fieldtype": "Int",
+   "label": "Default SLA Lead Time (Days)"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "default_publisher",
+   "fieldtype": "Link",
+   "label": "Default Publisher / Marketing Lead",
+   "options": "User"
+  },
+  {
+   "fieldname": "default_content_calendar",
+   "fieldtype": "Link",
+   "label": "Default Content Calendar",
+   "options": "Content Calendar"
+  },
+  {
+   "fieldname": "sla_reminder_section",
+   "fieldtype": "Section Break",
+   "label": "Due Date Reminder Configuration"
+  },
+  {
+   "default": "0",
+   "fieldname": "sla_reminder_enabled",
+   "fieldtype": "Check",
+   "label": "Enable Due Date Reminder Notifications"
+  },
+  {
+   "default": "3",
+   "depends_on": "eval:doc.sla_reminder_enabled",
+   "fieldname": "sla_reminder_days_before",
+   "fieldtype": "Int",
+   "label": "Reminder Days Before Due Date",
+   "mandatory_depends_on": "eval:doc.sla_reminder_enabled"
+  },
+  {
+   "fieldname": "templates_section",
+   "fieldtype": "Section Break",
+   "label": "Email Template Configuration"
+  },
+  {
+   "fieldname": "writer_email_template",
+   "fieldtype": "Link",
+   "label": "Writer Notification Template",
+   "options": "Email Template"
+  },
+  {
+   "fieldname": "reviewer_email_template",
+   "fieldtype": "Link",
+   "label": "Reviewer Notification Template",
+   "options": "Email Template"
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "publisher_email_template",
+   "fieldtype": "Link",
+   "label": "Publisher Approval Notification Template",
+   "options": "Email Template"
+  },
+  {
+   "fieldname": "published_email_template",
+   "fieldtype": "Link",
+   "label": "Published Notification Template",
+   "options": "Email Template"
+  },
+  {
+   "fieldname": "overdue_sla_email_template",
+   "fieldtype": "Link",
+   "label": "Overdue SLA Alert Template",
+   "options": "Email Template"
+  },
+  {
+   "fieldname": "ai_copilot_section",
+   "fieldtype": "Section Break",
+   "label": "Marketing Copilot AI Configuration & Prompt Templates"
+  },
+  {
+   "default": "0",
+   "fieldname": "enable_ai_copilot",
+   "fieldtype": "Check",
+   "label": "Enable AI Copilot Automated Review"
+  },
+{
+    "default": "80",
+    "depends_on": "eval:doc.enable_ai_copilot",
+    "fieldname": "ai_copilot_passing_score",
+    "fieldtype": "Int",
+    "label": "AI Copilot Minimum Passing Score (%)",
+    "mandatory_depends_on": "eval:doc.enable_ai_copilot"
+   },
+   {
+    "default": "3",
+    "depends_on": "eval:doc.enable_ai_copilot",
+    "fieldname": "max_writer_copilot_reviews_per_item",
+    "fieldtype": "Int",
+    "label": "Max Writer Copilot Reviews per Item",
+    "mandatory_depends_on": "eval:doc.enable_ai_copilot"
+   },
+   {
+    "default": "3",
+    "depends_on": "eval:doc.enable_ai_copilot",
+    "fieldname": "max_reviewer_copilot_reviews_per_item",
+    "fieldtype": "Int",
+    "label": "Max Reviewer Copilot Reviews per Item",
+    "mandatory_depends_on": "eval:doc.enable_ai_copilot"
+   },
+   {
+    "default": "APIM Gateway",
+   "depends_on": "eval:doc.enable_ai_copilot",
+   "fieldname": "ai_provider",
+   "fieldtype": "Select",
+   "label": "AI LLM Provider / Architecture",
+   "mandatory_depends_on": "eval:doc.enable_ai_copilot",
+   "options": "APIM Gateway\nOpenAI\nGoogle Gemini\nAnthropic\nCustom"
+  },
+  {
+   "depends_on": "eval:doc.enable_ai_copilot",
+   "fieldname": "ai_api_key_var",
+   "fieldtype": "Link",
+   "label": "API Key / Subscription Key (Env Variable)",
+   "mandatory_depends_on": "eval:doc.enable_ai_copilot",
+   "options": "Env Variable"
+  },
+  {
+   "depends_on": "eval:doc.enable_ai_copilot",
+   "fieldname": "ai_endpoint_var",
+   "fieldtype": "Link",
+   "label": "APIM / Endpoint URL (Env Variable)",
+   "mandatory_depends_on": "eval:doc.enable_ai_copilot",
+   "options": "Env Variable"
+  },
+  {
+   "default": "gpt-4o",
+   "depends_on": "eval:doc.enable_ai_copilot",
+   "fieldname": "ai_model_name",
+   "fieldtype": "Data",
+   "label": "Model Name (e.g. gpt-4o, gemini-1.5-pro)",
+   "mandatory_depends_on": "eval:doc.enable_ai_copilot"
+  },
+  {
+   "depends_on": "eval:doc.enable_ai_copilot",
+   "fieldname": "subagent_meta_prompt",
+   "fieldtype": "Code",
+   "label": "Subagent Meta-Prompt Template (Prompt Generator)",
+   "mandatory_depends_on": "eval:doc.enable_ai_copilot"
+  },
+  {
+   "depends_on": "eval:doc.enable_ai_copilot",
+   "fieldname": "evaluator_default_prompt",
+   "fieldtype": "Code",
+   "label": "Default Evaluator Base Prompt / Rubric Template",
+   "mandatory_depends_on": "eval:doc.enable_ai_copilot"
+  }
+ ],
+ "icon": "settings",
+ "idx": 0,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-08-05 18:00:00",
+ "modified_by": "Administrator",
+ "module": "ODA Marketing",
+ "name": "Marketing Settings",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Marketing Lead",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

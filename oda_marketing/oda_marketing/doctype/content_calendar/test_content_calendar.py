@@ -9,82 +9,90 @@ from oda_marketing.setup_fixtures import run_setup
 
 class TestContentCalendar(FrappeTestCase):
 	def setUp(self):
+		frappe.set_user("Administrator")
 		run_setup()
 
-	def test_calendar_approval_auto_generates_items(self):
+	def test_calendar_creation_and_item_linkage(self):
+		cal_name = "2026 Q4 Operations Calendar"
+		if frappe.db.exists("Content Calendar", cal_name):
+			frappe.delete_doc("Content Calendar", cal_name, force=True)
+
 		calendar = frappe.get_doc({
 			"doctype": "Content Calendar",
-			"title": "Test Sprint 1 Calendar",
-			"year": "2026",
-			"month": "August",
-			"description": "Testing auto generation of content items",
-			"slots": [
-				{
-					"slot_title": "AI in Marketing Trends",
-					"content_type": "Blog Post",
-					"planned_publish_date": "2026-08-05",
-					"channel": "Website",
-					"target_audience": "B2B Tech Leaders"
-				},
-				{
-					"slot_title": "Product Launch Post",
-					"content_type": "Social Post",
-					"planned_publish_date": "2026-08-10",
-					"channel": "LinkedIn",
-					"target_audience": "Industry Professionals"
-				}
-			]
+			"calendar_name": cal_name,
+			"from_date": "2026-10-01",
+			"to_date": "2026-12-31",
+			"status": "Active",
+			"description": "Testing content calendar creation"
 		})
 		calendar.insert()
-		self.assertEqual(calendar.status, "Draft")
-		self.assertEqual(calendar.docstatus, 0)
+		self.assertEqual(calendar.calendar_name, cal_name)
+		self.assertEqual(calendar.status, "Active")
 
-		# Submit calendar
-		calendar.submit()
-		self.assertEqual(calendar.status, "Approved")
-		self.assertEqual(calendar.docstatus, 1)
-
-		# Reload calendar to check slots
-		calendar.reload()
-		for slot in calendar.slots:
-			self.assertTrue(bool(slot.content_item))
-			item = frappe.get_doc("Content Item", slot.content_item)
-			self.assertEqual(item.title, slot.slot_title)
-			self.assertEqual(item.content_type, slot.content_type)
-			self.assertEqual(item.channel, slot.channel)
-			self.assertEqual(item.workflow_state, "Planned")
-			self.assertEqual(item.content_calendar, calendar.name)
-
-			# Verify Content Brief creation
-			self.assertTrue(bool(item.content_brief))
-			brief = frappe.get_doc("Content Brief", item.content_brief)
-			self.assertEqual(brief.content_item, item.name)
-			self.assertIn("Brief:", brief.brief_title)
+		item = frappe.get_doc({
+			"doctype": "Content Item",
+			"title": "Q4 Strategy Blog",
+			"content_type": "Blog",
+			"topic": "Q4 Cloud Strategy Briefing",
+			"practice_area": "Cross-domain",
+			"content_calendar": calendar.name,
+			"planned_publish_date": "2026-10-15",
+			"assigned_to": "writer.test@oda.local",
+			"reviewer_technical": "Avishkar.Kabadi@optimumdataanalytics.com"
+		})
+		item.insert()
+		self.assertEqual(item.content_calendar, calendar.name)
+		self.assertEqual(item.workflow_state, "Planned")
 
 	def test_content_item_workflow_transitions(self):
+		cal_name = "2026 Q4 Operations Calendar"
+		if not frappe.db.exists("Content Calendar", cal_name):
+			frappe.get_doc({
+				"doctype": "Content Calendar",
+				"calendar_name": cal_name,
+				"from_date": "2026-10-01",
+				"to_date": "2026-12-31",
+				"status": "Active"
+			}).insert()
+
 		item = frappe.get_doc({
 			"doctype": "Content Item",
 			"title": "Workflow Test Item",
-			"content_type": "Newsletter",
-			"channel": "Email",
+			"content_type": "Blog",
+			"topic": "Workflow test topic",
+			"practice_area": "Fintech",
+			"content_calendar": cal_name,
+			"planned_publish_date": "2026-11-01",
+			"assigned_to": "writer.test@oda.local",
+			"reviewer_technical": "Avishkar.Kabadi@optimumdataanalytics.com",
 			"workflow_state": "Planned",
 			"status": "Planned"
 		})
 		item.insert()
 		self.assertEqual(item.workflow_state, "Planned")
 
-		# Apply workflow transition Planned -> Briefing
-		apply_workflow(item, "Start Briefing")
-		self.assertEqual(item.workflow_state, "Briefing")
+		# Issue Brief -> Briefed
+		frappe.set_user("lead.test@oda.local")
+		apply_workflow(item, "Issue Brief")
+		item.reload()
+		self.assertEqual(item.workflow_state, "Briefed")
 
-		# Apply workflow transition Briefing -> Drafting
-		apply_workflow(item, "Submit Brief")
-		self.assertEqual(item.workflow_state, "Drafting")
+		# Start Work -> In Progress (renamed from "Accept Brief")
+		frappe.set_user("writer.test@oda.local")
+		apply_workflow(item, "Start Work")
+		item.reload()
+		self.assertEqual(item.workflow_state, "In Progress")
 
-		# Apply workflow transition Drafting -> In Review
+		# Submit for Review (renamed from "Submit for Technical Review")
+		item.content_file_1 = "/files/sample_draft.txt"
+		item.save()
 		apply_workflow(item, "Submit for Review")
+		item.reload()
 		self.assertEqual(item.workflow_state, "In Review")
 
-		# Apply workflow transition In Review -> Approved
-		apply_workflow(item, "Approve Content")
+		# Approve -> Approved (renamed from "Approve Technical")
+		frappe.set_user("Avishkar.Kabadi@optimumdataanalytics.com")
+		apply_workflow(item, "Approve")
+		item.reload()
 		self.assertEqual(item.workflow_state, "Approved")
+

@@ -4,5 +4,5 @@
 from frappe.model.document import Document
 
 
-class ContentBrief(Document):
+class ContentItemAIReview(Document):
 	pass

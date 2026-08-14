@@ -38,9 +38,9 @@ frappe.ui.form.on("Content Item", {
 				const enable_ai = res && res.message ? res.message.enable_ai_copilot : 0;
 				const max_writer_reviews = res && res.message ? res.message.max_writer_copilot_reviews_per_item : 2;
 				const max_reviewer_reviews = res && res.message ? res.message.max_reviewer_copilot_reviews_per_item : 2;
-				const is_writer = frappe.user.has_role("Content Writer");
-				const is_reviewer = frappe.user.has_role("Technical Reviewer");
 				const is_lead = frappe.user.has_role("Marketing Lead") || frappe.user.has_role("System Manager") || frappe.session.user === "Administrator";
+				const is_reviewer = frappe.user.has_role("Technical Reviewer");
+				const is_writer = (frappe.user.has_role("Content Writer") || is_lead) && !is_reviewer;
 
 				const has_primary_draft = !!(frm.doc.content_file_1 && String(frm.doc.content_file_1).trim());
 
@@ -126,7 +126,8 @@ frappe.ui.form.on("Content Item", {
 					frm.set_df_property("ai_section", "hidden", 1);
 					frm.set_df_property("ai_score", "hidden", 1);
 					frm.set_df_property("ai_review_status", "hidden", 1);
-					frm.set_df_property("ai_copilot_feedback", "hidden", 1);
+					frm.set_df_property("writer_copilot_feedback", "hidden", 1);
+					frm.set_df_property("reviewer_copilot_feedback", "hidden", 1);
 					frm.set_df_property("ai_reviews", "hidden", 1);
 				}
 				frm.trigger("apply_role_field_permissions");
@@ -157,9 +158,8 @@ frappe.ui.form.on("Content Item", {
 
 	apply_role_field_permissions(frm) {
 		const is_lead = frappe.user.has_role("Marketing Lead") || frappe.user.has_role("System Manager") || frappe.session.user === "Administrator";
-		const is_writer = frappe.user.has_role("Content Writer") || is_lead;
 		const is_reviewer = frappe.user.has_role("Technical Reviewer");
-		const is_assigned_writer = (frappe.session.user === frm.doc.assigned_to) || (frappe.session.user === frm.doc.owner);
+		const is_writer = (frappe.user.has_role("Content Writer") || is_lead) && !is_reviewer;
 
 		if (!is_lead) {
 			const metadata_fields = [
@@ -188,6 +188,9 @@ frappe.ui.form.on("Content Item", {
 			frm.set_df_property("content_file_3", "read_only", is_planned ? 1 : 0);
 			frm.set_df_property("notes", "read_only", is_planned ? 1 : 0);
 			frm.set_df_property("revision_feedback_notes", "read_only", 1);
+
+			// Strictly hide Reviewer Instructions from Content Writer
+			frm.set_df_property("reviewer_copilot_instructions", "hidden", 1);
 		} else if (is_reviewer && !is_lead) {
 			frm.set_df_property("content_file_1", "read_only", 1);
 			frm.set_df_property("content_file_2", "read_only", 1);
@@ -196,6 +199,9 @@ frappe.ui.form.on("Content Item", {
 			frm.set_df_property("revision_feedback_notes", "read_only", 0);
 			// Reviewer can write copilot instructions when in review
 			frm.set_df_property("reviewer_copilot_instructions", "read_only", frm.doc.workflow_state === "In Review" ? 0 : 1);
+			frm.set_df_property("reviewer_copilot_instructions", "hidden", (frm.doc.reviewer_copilot_instructions || frm.doc.workflow_state === "In Review") ? 0 : 1);
+		} else if (is_lead) {
+			frm.set_df_property("reviewer_copilot_instructions", "hidden", frm.doc.reviewer_copilot_instructions ? 0 : 1);
 		}
 
 		// Require revision feedback notes if state is In Revision
@@ -209,31 +215,38 @@ frappe.ui.form.on("Content Item", {
 		// Always keep AI reviews table grid read-only to prevent user edits
 		frm.set_df_property("ai_reviews", "read_only", 1);
 
-		// AI Copilot Feedback & Review History: show only relevant reviews per role
-		// Writer sees only Writer reviews, Reviewer sees only Reviewer reviews, Lead sees all
+		// Both Feedback fields are visible to Content Writer & Reviewer whenever populated
+		frm.set_df_property("writer_copilot_feedback", "hidden", frm.doc.writer_copilot_feedback ? 0 : 1);
+		frm.set_df_property("reviewer_copilot_feedback", "hidden", frm.doc.reviewer_copilot_feedback ? 0 : 1);
+
 		const writer_reviews = (frm.doc.ai_reviews || []).filter(r => r.review_type === "Writer");
 		const reviewer_reviews = (frm.doc.ai_reviews || []).filter(r => r.review_type === "Reviewer");
+		const has_any_reviews = (frm.doc.ai_reviews || []).length > 0;
 
-		if (is_reviewer && !is_lead) {
-			// Reviewer sees only Reviewer reviews
-			frm.set_df_property("ai_copilot_feedback", "hidden", (reviewer_reviews.length > 0 && frm.doc.ai_copilot_feedback) ? 0 : 1);
-			frm.set_df_property("ai_reviews", "hidden", (reviewer_reviews.length > 0) ? 0 : 1);
-		} else if (is_writer || is_assigned_writer) {
-			// Writer sees only Writer reviews
-			frm.set_df_property("ai_copilot_feedback", "hidden", (writer_reviews.length > 0 && frm.doc.ai_copilot_feedback) ? 0 : 1);
-			frm.set_df_property("ai_reviews", "hidden", (writer_reviews.length > 0) ? 0 : 1);
-		} else if (is_lead) {
-			// Lead sees all
-			frm.set_df_property("ai_copilot_feedback", "hidden", (frm.doc.ai_copilot_feedback) ? 0 : 1);
-			frm.set_df_property("ai_reviews", "hidden", (frm.doc.ai_reviews && frm.doc.ai_reviews.length > 0) ? 0 : 1);
-		} else {
-			frm.set_df_property("ai_copilot_feedback", "hidden", 1);
-			frm.set_df_property("ai_reviews", "hidden", 1);
+		frm.set_df_property("ai_reviews", "hidden", has_any_reviews ? 0 : 1);
+
+		// Filter child grid rows rendered on the form so Writer sees Writer rows and Reviewer sees Reviewer rows
+		if (frm.fields_dict.ai_reviews && frm.fields_dict.ai_reviews.grid) {
+			const grid = frm.fields_dict.ai_reviews.grid;
+			grid.grid_rows.forEach(row => {
+				if (!is_lead) {
+					if (is_reviewer && row.doc.review_type !== "Reviewer") {
+						row.wrapper.hide();
+					} else if (!is_reviewer && row.doc.review_type !== "Writer") {
+						row.wrapper.hide();
+					} else {
+						row.wrapper.show();
+					}
+				} else {
+					row.wrapper.show();
+				}
+			});
 		}
 
 		frm.refresh_field("ai_score");
 		frm.refresh_field("ai_review_status");
-		frm.refresh_field("ai_copilot_feedback");
+		frm.refresh_field("writer_copilot_feedback");
+		frm.refresh_field("reviewer_copilot_feedback");
 		frm.refresh_field("ai_reviews");
 	},
 

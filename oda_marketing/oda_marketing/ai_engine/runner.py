@@ -64,6 +64,11 @@ def run_ai_review(docname, reviewer_instructions=None, review_type="Writer"):
 		doc.ai_generated_prompt = dynamic_prompt
 		doc.ai_copilot_feedback = feedback
 
+		if review_type == "Reviewer":
+			doc.reviewer_copilot_feedback = feedback
+		else:
+			doc.writer_copilot_feedback = feedback
+
 		# Record entry in AI Review History Table
 		verdict_label = "Passed" if score >= passing_score else "Revision Required"
 		doc.append("ai_reviews", {

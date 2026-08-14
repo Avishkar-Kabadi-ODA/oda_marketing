@@ -20,6 +20,18 @@ frappe.ui.form.on("Content Item", {
 				}
 			};
 		});
+
+		frm.set_query("reviewer_technical", function() {
+			return {
+				query: "oda_marketing.oda_marketing.doctype.content_item.content_item.get_reviewer_users"
+			};
+		});
+
+		frm.set_query("assigned_to", function() {
+			return {
+				query: "oda_marketing.oda_marketing.doctype.content_item.content_item.get_assigned_to_users"
+			};
+		});
 	},
 
 	refresh(frm) {
@@ -60,17 +72,12 @@ frappe.ui.form.on("Content Item", {
 						if ((writer_copilot_states.includes(frm.doc.workflow_state) || frm.doc.ai_review_status === "Queued") && (is_writer || is_lead)) {
 							if (!writer_limit_reached) {
 								frm.add_custom_button(__("Run AI Copilot Review"), function() {
-									frappe.show_progress(__("Marketing Copilot Review"), 15, 100, __("Starting AI Copilot Review..."));
+									frappe.show_progress(__("Marketing Copilot Review"), 10, 100, __("Initiating AI Copilot Review..."));
 									frappe.call({
 										method: "oda_marketing.oda_marketing.doctype.content_item.content_item.trigger_ai_copilot",
 										args: { docname: frm.doc.name },
 										callback: function(r) {
-											frappe.hide_progress();
-											frappe.show_alert({ message: __("AI Copilot Review queued!"), indicator: "green" });
-											frm.reload_doc().then(() => {
-												frm.trigger("apply_role_field_permissions");
-												frm.refresh_fields();
-											});
+											frappe.show_progress(__("Marketing Copilot Review"), 20, 100, __("Evaluating content deliverable with AI Copilot..."));
 										}
 									});
 								}, __("Copilot"));
@@ -98,22 +105,19 @@ frappe.ui.form.on("Content Item", {
 										primary_action_label: __("Run Copilot Review"),
 										primary_action(values) {
 											d.hide();
-											frappe.show_progress(__("Marketing Copilot Review"), 15, 100, __("Starting Reviewer Copilot Review..."));
-											frappe.call({
-												method: "oda_marketing.oda_marketing.doctype.content_item.content_item.trigger_reviewer_copilot",
-												args: {
-													docname: frm.doc.name,
-													instructions: values.instructions
-												},
-												callback: function(r) {
-													frappe.hide_progress();
-													frappe.show_alert({ message: __("Reviewer Copilot Review queued!"), indicator: "green" });
-													frm.reload_doc().then(() => {
-														frm.trigger("apply_role_field_permissions");
-														frm.refresh_fields();
-													});
-												}
-											});
+											setTimeout(function() {
+												frappe.show_progress(__("Marketing Copilot Review"), 10, 100, __("Initiating Reviewer Copilot Review..."));
+												frappe.call({
+													method: "oda_marketing.oda_marketing.doctype.content_item.content_item.trigger_reviewer_copilot",
+													args: {
+														docname: frm.doc.name,
+														instructions: values.instructions
+													},
+													callback: function(r) {
+														frappe.show_progress(__("Marketing Copilot Review"), 20, 100, __("Evaluating content deliverable with Reviewer Copilot..."));
+													}
+												});
+											}, 200);
 										}
 									});
 									d.show();
@@ -134,26 +138,28 @@ frappe.ui.form.on("Content Item", {
 			}
 		});
 
-		// Listen for realtime streaming socket events from AI Agent
-		if (!frm.ai_socket_listener) {
-			frm.ai_socket_listener = true;
-			frappe.realtime.on("ai_copilot_stream", function(data) {
-				if (data && data.docname === frm.doc.name) {
-					if (data.progress >= 100) {
+		// Listen for realtime streaming socket events from AI Agent (re-bound cleanly on every refresh)
+		frappe.realtime.off("ai_copilot_stream");
+		frappe.realtime.on("ai_copilot_stream", function(data) {
+			if (data && data.docname === frm.doc.name) {
+				if (data.progress >= 100) {
+					frappe.show_progress(__("Marketing Copilot Review"), 100, 100, data.message || __("Review complete!"));
+					setTimeout(() => {
 						frappe.hide_progress();
 						frappe.show_alert({ message: __("AI Copilot Review completed!"), indicator: "green" });
-						setTimeout(() => {
-							frm.reload_doc().then(() => {
-								frm.trigger("apply_role_field_permissions");
-								frm.refresh_fields();
-							});
-						}, 500);
-					} else {
-						frappe.show_progress(__("Marketing Copilot Review"), data.progress || 50, 100, data.message || __("Evaluating deliverable..."));
-					}
+						frm.reload_doc().then(() => {
+							frm.trigger("apply_role_field_permissions");
+							frm.refresh_fields();
+						});
+					}, 600);
+				} else if (data.progress === 0 && (data.message || "").includes("failed")) {
+					frappe.hide_progress();
+					frappe.show_alert({ message: data.message, indicator: "red" });
+				} else {
+					frappe.show_progress(__("Marketing Copilot Review"), data.progress || 50, 100, data.message || __("Evaluating deliverable..."));
 				}
-			});
-		}
+			}
+		});
 	},
 
 	apply_role_field_permissions(frm) {
@@ -215,15 +221,33 @@ frappe.ui.form.on("Content Item", {
 		// Always keep AI reviews table grid read-only to prevent user edits
 		frm.set_df_property("ai_reviews", "read_only", 1);
 
-		// Both Feedback fields are visible to Content Writer & Reviewer whenever populated
-		frm.set_df_property("writer_copilot_feedback", "hidden", frm.doc.writer_copilot_feedback ? 0 : 1);
-		frm.set_df_property("reviewer_copilot_feedback", "hidden", frm.doc.reviewer_copilot_feedback ? 0 : 1);
-
 		const writer_reviews = (frm.doc.ai_reviews || []).filter(r => r.review_type === "Writer");
 		const reviewer_reviews = (frm.doc.ai_reviews || []).filter(r => r.review_type === "Reviewer");
-		const has_any_reviews = (frm.doc.ai_reviews || []).length > 0;
 
-		frm.set_df_property("ai_reviews", "hidden", has_any_reviews ? 0 : 1);
+		if (is_reviewer && !is_lead) {
+			// Reviewer sees ONLY Reviewer feedback & Reviewer reviews; STRICTLY HIDE Writer feedback
+			frm.set_df_property("reviewer_copilot_feedback", "hidden", (frm.doc.reviewer_copilot_feedback || reviewer_reviews.length > 0) ? 0 : 1);
+			frm.set_df_property("writer_copilot_feedback", "hidden", 1);
+			frm.set_df_property("ai_reviews", "hidden", (reviewer_reviews.length > 0) ? 0 : 1);
+
+			if (reviewer_reviews.length > 0) {
+				frm.set_value("ai_score", reviewer_reviews[reviewer_reviews.length - 1].score);
+			}
+		} else if (!is_lead) {
+			// Writer sees ONLY Writer feedback & Writer reviews; STRICTLY HIDE Reviewer feedback & instructions
+			frm.set_df_property("writer_copilot_feedback", "hidden", (frm.doc.writer_copilot_feedback || writer_reviews.length > 0) ? 0 : 1);
+			frm.set_df_property("reviewer_copilot_feedback", "hidden", 1);
+			frm.set_df_property("ai_reviews", "hidden", (writer_reviews.length > 0) ? 0 : 1);
+
+			if (writer_reviews.length > 0) {
+				frm.set_value("ai_score", writer_reviews[writer_reviews.length - 1].score);
+			}
+		} else if (is_lead) {
+			// Lead sees BOTH Writer and Reviewer feedback
+			frm.set_df_property("writer_copilot_feedback", "hidden", (frm.doc.writer_copilot_feedback) ? 0 : 1);
+			frm.set_df_property("reviewer_copilot_feedback", "hidden", (frm.doc.reviewer_copilot_feedback) ? 0 : 1);
+			frm.set_df_property("ai_reviews", "hidden", (frm.doc.ai_reviews && frm.doc.ai_reviews.length > 0) ? 0 : 1);
+		}
 
 		// Filter child grid rows rendered on the form so Writer sees Writer rows and Reviewer sees Reviewer rows
 		if (frm.fields_dict.ai_reviews && frm.fields_dict.ai_reviews.grid) {

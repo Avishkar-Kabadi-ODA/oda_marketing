@@ -22,6 +22,7 @@ class ContentItem(Document):
 		self.validate_revision_notes()
 		self.validate_published_url_mandatory()
 		self.stamp_brief_accepted_on()
+		self.auto_assign_writer_role()
 
 	def before_insert(self):
 		if self.assigned_to:
@@ -31,6 +32,21 @@ class ContentItem(Document):
 			settings = frappe.get_single("Marketing Settings")
 			if getattr(settings, "sla_reminder_enabled", 0):
 				self.reminder_1_days_before = int(getattr(settings, "sla_reminder_days_before", 3) or 3)
+
+	def auto_assign_writer_role(self):
+		"""Auto-assign Content Writer role to assigned_to user if they do not hold any marketing role yet."""
+		if self.assigned_to and frappe.db.exists("User", self.assigned_to):
+			user_roles = frappe.get_roles(self.assigned_to)
+			if "Content Writer" not in user_roles:
+				user_doc = frappe.get_doc("User", self.assigned_to)
+				user_doc.append("roles", {"role": "Content Writer"})
+				user_doc.flags.ignore_permissions = True
+				user_doc.save(ignore_permissions=True)
+				frappe.msgprint(
+					_("Role <b>Content Writer</b> has been automatically assigned to user <b>{0}</b>.").format(self.assigned_to),
+					alert=True,
+					indicator="green"
+				)
 
 	def validate_description_length(self):
 		if self.description and len(str(self.description).strip()) > 500:
@@ -487,6 +503,39 @@ def send_overdue_sla_notifications():
 					frappe.log_error(f"Failed to send reminder email for {item.name}: {str(e)}")
 
 	frappe.db.commit()
+
+
+@frappe.whitelist()
+def get_reviewer_users(doctype, txt, searchfield, start, page_len, filters):
+	"""Filters Reviewer link dropdown to only show enabled System Users holding the Technical Reviewer role."""
+	return frappe.db.sql("""
+		SELECT DISTINCT u.name, CONCAT_WS(' ', u.first_name, u.last_name)
+		FROM `tabUser` u
+		INNER JOIN `tabHas Role` r ON r.parent = u.name
+		WHERE u.enabled = 1 AND u.user_type = 'System User'
+		AND r.role = 'Technical Reviewer'
+		AND (u.name LIKE %s OR u.first_name LIKE %s OR u.last_name LIKE %s)
+		ORDER BY u.name ASC
+		LIMIT %s, %s
+	""", (f"%{txt}%", f"%{txt}%", f"%{txt}%", int(start or 0), int(page_len or 20)))
+
+
+@frappe.whitelist()
+def get_assigned_to_users(doctype, txt, searchfield, start, page_len, filters):
+	"""Filters Assigned To link dropdown to show enabled System Users EXCEPT Administrator and users holding Marketing Lead, Technical Reviewer, or System Manager role."""
+	return frappe.db.sql("""
+		SELECT DISTINCT u.name, CONCAT_WS(' ', u.first_name, u.last_name)
+		FROM `tabUser` u
+		WHERE u.enabled = 1 AND u.user_type = 'System User'
+		AND u.name != 'Administrator'
+		AND u.name NOT IN (
+			SELECT DISTINCT parent FROM `tabHas Role`
+			WHERE role IN ('Marketing Lead', 'Technical Reviewer', 'System Manager')
+		)
+		AND (u.name LIKE %s OR u.first_name LIKE %s OR u.last_name LIKE %s)
+		ORDER BY u.name ASC
+		LIMIT %s, %s
+	""", (f"%{txt}%", f"%{txt}%", f"%{txt}%", int(start or 0), int(page_len or 20)))
 
 
 @frappe.whitelist()

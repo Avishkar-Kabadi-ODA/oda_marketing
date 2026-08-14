@@ -142,7 +142,7 @@ Evaluate this deliverable according to your System Prompt criteria and output va
 
 
 def publish_stream_event(docname, user_email, message, progress=0):
-	"""Publishes realtime evaluation updates to desk UI."""
+	"""Publishes realtime evaluation updates to desk UI for all users viewing the deliverable."""
 	try:
 		frappe.publish_realtime(
 			event="ai_copilot_stream",
@@ -150,8 +150,7 @@ def publish_stream_event(docname, user_email, message, progress=0):
 				"docname": docname,
 				"message": message,
 				"progress": progress
-			},
-			user=user_email
+			}
 		)
 	except Exception:
 		pass

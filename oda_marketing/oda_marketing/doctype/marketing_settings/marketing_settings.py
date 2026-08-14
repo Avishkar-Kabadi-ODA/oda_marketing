@@ -62,3 +62,18 @@ class MarketingSettings(Document):
 			days_before = int(getattr(self, "sla_reminder_days_before", 0) or 0)
 			if days_before < 1:
 				frappe.throw(_("<b>Reminder Days Before Due Date</b> must be at least 1 when reminders are enabled."))
+
+
+@frappe.whitelist()
+def get_publisher_users(doctype, txt, searchfield, start, page_len, filters):
+	"""Filters Default Publisher dropdown in Marketing Settings to show enabled System Users holding Marketing Lead or System Manager role, or Administrator."""
+	return frappe.db.sql("""
+		SELECT DISTINCT u.name, CONCAT_WS(' ', u.first_name, u.last_name)
+		FROM `tabUser` u
+		LEFT JOIN `tabHas Role` r ON r.parent = u.name
+		WHERE u.enabled = 1 AND u.user_type = 'System User'
+		AND (r.role IN ('Marketing Lead', 'System Manager') OR u.name = 'Administrator')
+		AND (u.name LIKE %s OR u.first_name LIKE %s OR u.last_name LIKE %s)
+		ORDER BY u.name ASC
+		LIMIT %s, %s
+	""", (f"%{txt}%", f"%{txt}%", f"%{txt}%", int(start or 0), int(page_len or 20)))

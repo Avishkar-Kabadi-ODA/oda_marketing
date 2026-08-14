@@ -2,6 +2,7 @@
 # For license information, please see license.txt
 
 import frappe
+from frappe import _
 
 
 def has_app_permission(user=None):
@@ -63,3 +64,22 @@ def has_content_item_permission(doc, ptype="read", user=None):
 		return True
 
 	return False
+
+
+def validate_user_marketing_roles(doc, method=None):
+	"""
+	Enforces mutual exclusivity among marketing roles:
+	A user cannot hold more than ONE of: Marketing Lead, Content Writer, Technical Reviewer.
+	"""
+	marketing_roles = {"Marketing Lead", "Content Writer", "Technical Reviewer"}
+	assigned_marketing_roles = [
+		r.role for r in (doc.roles or [])
+		if r.role in marketing_roles
+	]
+
+	if len(assigned_marketing_roles) > 1:
+		roles_list_str = ", ".join(f"<b>{r}</b>" for r in sorted(assigned_marketing_roles))
+		frappe.throw(
+			_("A user cannot hold multiple marketing roles simultaneously ({0}). A user can be assigned only ONE role among: <b>Marketing Lead</b>, <b>Content Writer</b>, or <b>Technical Reviewer</b>.").format(roles_list_str),
+			frappe.ValidationError
+		)

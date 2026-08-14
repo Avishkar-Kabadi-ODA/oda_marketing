@@ -2,6 +2,13 @@
 // For license information, please see license.txt
 
 frappe.ui.form.on("Marketing Settings", {
+	setup(frm) {
+		frm.set_query("default_publisher", function() {
+			return {
+				query: "oda_marketing.oda_marketing.doctype.marketing_settings.marketing_settings.get_publisher_users"
+			};
+		});
+	},
 	refresh(frm) {
 		frm.trigger("toggle_ai_copilot_fields");
 	},

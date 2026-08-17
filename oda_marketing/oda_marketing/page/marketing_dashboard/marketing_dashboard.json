@@ -1,0 +1,23 @@
+{
+ "content": null,
+ "creation": "2026-08-14 11:30:00.000000",
+ "docstatus": 0,
+ "doctype": "Page",
+ "idx": 0,
+ "modified": "2026-08-14 14:50:00.000000",
+ "modified_by": "Administrator",
+ "module": "ODA Marketing",
+ "name": "marketing-dashboard",
+ "owner": "Administrator",
+ "page_name": "marketing-dashboard",
+ "roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "Marketing Lead"
+  }
+ ],
+ "standard": "Yes",
+ "title": "Marketing Dashboard"
+}

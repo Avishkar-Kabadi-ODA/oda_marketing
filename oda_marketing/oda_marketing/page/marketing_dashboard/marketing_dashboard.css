@@ -1,0 +1,202 @@
+/* ODA Marketing Operations Dashboard Stylesheet */
+
+.marketing-dashboard-wrapper {
+	padding: 20px 24px 60px;
+	background-color: var(--bg-color, #F8FAFC);
+	min-height: 100vh;
+	box-sizing: border-box;
+}
+
+/* Responsive Filter Card */
+.dashboard-filter-card {
+	background: #FFFFFF;
+	border: 1px solid #E2E8F0;
+	border-radius: 12px;
+	padding: 16px 20px;
+	margin-bottom: 24px;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.dashboard-filter-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 14px;
+	padding-bottom: 10px;
+	border-bottom: 1px solid #F1F5F9;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.filter-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+	gap: 12px 16px;
+	align-items: flex-end;
+}
+
+.filter-item {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.filter-label {
+	font-size: 11px;
+	font-weight: 600;
+	color: #64748B;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.filter-select {
+	width: 100%;
+	height: 36px;
+	background-color: #FFFFFF;
+	border: 1px solid #CBD5E1;
+	border-radius: 8px;
+	padding: 0 10px;
+	font-size: 13px;
+	color: #1E293B;
+	outline: none;
+	transition: border-color 0.15s ease, box-shadow 0.15s ease;
+	cursor: pointer;
+}
+
+.filter-select:focus {
+	border-color: #4F46E5;
+	box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+}
+
+/* KPI Cards Grid */
+.kpi-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+	gap: 14px;
+	margin-bottom: 24px;
+}
+
+.kpi-box {
+	background: #FFFFFF;
+	border: 1px solid #E2E8F0;
+	border-radius: 12px;
+	padding: 16px 18px;
+	cursor: pointer;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+	transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+	position: relative;
+	overflow: hidden;
+}
+
+.kpi-box:hover {
+	transform: translateY(-2px);
+	box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+	border-color: #CBD5E1;
+}
+
+.kpi-box::before {
+	content: "";
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 4px;
+	height: 100%;
+	background: transparent;
+}
+
+.kpi-box[data-state=""]::before { background: #4F46E5; }
+.kpi-box[data-state="Planned"]::before { background: #64748B; }
+.kpi-box[data-state="Briefed"]::before { background: #2563EB; }
+.kpi-box[data-state="In Progress"]::before { background: #EA580C; }
+.kpi-box[data-state="In Review"]::before { background: #CA8A04; }
+.kpi-box[data-state="In Revision"]::before { background: #DC2626; }
+.kpi-box[data-state="Approved"]::before { background: #0891B2; }
+.kpi-box[data-state="Published"]::before { background: #059669; }
+.kpi-box[data-risk="Late"]::before { background: #BE123C; }
+
+.kpi-title {
+	font-size: 11px;
+	font-weight: 700;
+	color: #64748B;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	margin-bottom: 6px;
+}
+
+.kpi-value {
+	font-size: 26px;
+	font-weight: 800;
+	color: #0F172A;
+	line-height: 1.1;
+	margin-bottom: 4px;
+}
+
+.kpi-subtitle {
+	font-size: 11px;
+	color: #94A3B8;
+}
+
+/* Charts Grid */
+.charts-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+	gap: 20px;
+}
+
+.chart-card {
+	background: #FFFFFF;
+	border: 1px solid #E2E8F0;
+	border-radius: 12px;
+	padding: 18px 20px;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.chart-card-title {
+	font-weight: 700;
+	color: #1E293B;
+	font-size: 14px;
+	margin-bottom: 16px;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.chart-container {
+	min-height: 240px;
+	width: 100%;
+}
+
+/* Responsive Breakpoints */
+@media (max-width: 992px) {
+	.charts-grid {
+		grid-template-columns: 1fr;
+	}
+}
+
+@media (max-width: 768px) {
+	.marketing-dashboard-wrapper {
+		padding: 12px 14px 40px;
+	}
+
+	.filter-grid {
+		grid-template-columns: 1fr 1fr;
+	}
+
+	.kpi-grid {
+		grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+		gap: 10px;
+	}
+
+	.kpi-value {
+		font-size: 20px;
+	}
+}
+
+@media (max-width: 480px) {
+	.filter-grid {
+		grid-template-columns: 1fr;
+	}
+}

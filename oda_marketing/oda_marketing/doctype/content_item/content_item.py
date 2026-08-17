@@ -10,10 +10,12 @@ from frappe.utils import add_days, getdate, nowdate, now_datetime, get_url
 class ContentItem(Document):
 	def validate(self):
 		self.validate_description_length()
+		self.validate_assigned_to_reviewer_mutual_exclusion()
 		self.validate_creation_permissions()
 		self.validate_metadata_edit_permissions()
 		self.validate_writer_readonly_before_briefed()
 		self.validate_reviewer_readonly_fields()
+		self.validate_workflow_transition_permissions()
 		self.sync_status_with_workflow()
 		self.validate_publish_date_with_calendar()
 		self.check_overdue_sla()
@@ -22,7 +24,111 @@ class ContentItem(Document):
 		self.validate_revision_notes()
 		self.validate_published_url_mandatory()
 		self.stamp_brief_accepted_on()
-		self.auto_assign_writer_role()
+
+	def before_workflow_action(self, action=None):
+		if frappe.flags.ignore_permissions or self.flags.ignore_permissions or getattr(self.flags, "ignore_workflow", False):
+			return
+
+		user = frappe.session.user
+		if user == "Administrator":
+			return
+
+		user_lower = (user or "").lower()
+		assigned_lower = (self.assigned_to or "").lower()
+		reviewer_lower = (self.reviewer_technical or "").lower()
+
+		is_doc_writer = (user_lower == assigned_lower)
+		is_doc_reviewer = (user_lower == reviewer_lower)
+		roles = frappe.get_roles(user)
+		is_lead = ("Marketing Lead" in roles or "System Manager" in roles) and not is_doc_writer
+
+		if action in ["Request Changes", "Approve"]:
+			if is_doc_writer:
+				frappe.throw(
+					_("As the assigned writer, you cannot review, approve, or request changes on your own deliverable."),
+					frappe.PermissionError
+				)
+			if not is_doc_reviewer and not is_lead:
+				frappe.throw(
+					_("Only the assigned Reviewer (<b>{0}</b>) or a Marketing Lead can review this deliverable.").format(self.reviewer_technical or "Reviewer"),
+					frappe.PermissionError
+				)
+
+		elif action in ["Start Work", "Submit for Review", "Resubmit Draft"]:
+			if is_doc_reviewer and not is_doc_writer and not is_lead:
+				frappe.throw(
+					_("Only the assigned Writer (<b>{0}</b>) can perform drafting actions on this deliverable.").format(self.assigned_to or "Writer"),
+					frappe.PermissionError
+				)
+
+		elif action in ["Publish"]:
+			from oda_marketing.permissions import get_default_publisher
+			publisher = get_default_publisher()
+			is_publisher = user_lower == (publisher or "").lower()
+			if not (is_lead or is_publisher):
+				frappe.throw(_("Only Marketing Leads and Publishers can mark deliverables as Published."), frappe.PermissionError)
+
+	def validate_workflow_transition_permissions(self):
+		if frappe.flags.ignore_permissions or self.flags.ignore_permissions or getattr(self.flags, "ignore_workflow", False):
+			return
+		before = self.get_doc_before_save()
+		if not before:
+			return
+
+		curr_state = getattr(self, "workflow_state", None) or getattr(self, "status", None)
+		prev_state = getattr(before, "workflow_state", None) or getattr(before, "status", None)
+
+		if not curr_state or not prev_state or curr_state == prev_state:
+			return
+
+		user = frappe.session.user
+		if user == "Administrator":
+			return
+
+		user_lower = (user or "").lower()
+		assigned_lower = (self.assigned_to or "").lower()
+		reviewer_lower = (self.reviewer_technical or "").lower()
+
+		is_doc_writer = (user_lower == assigned_lower)
+		is_doc_reviewer = (user_lower == reviewer_lower)
+		roles = frappe.get_roles(user)
+		is_lead = ("Marketing Lead" in roles or "System Manager" in roles) and not is_doc_writer
+
+		# Review & Approval transitions: ONLY reviewer or Lead (who is NOT the writer)
+		if prev_state == "In Review" and curr_state in ["In Revision", "Approved"]:
+			if is_doc_writer:
+				frappe.throw(
+					_("As the assigned writer, you cannot review, approve, or request changes on your own deliverable."),
+					frappe.PermissionError
+				)
+			if not is_doc_reviewer and not is_lead:
+				frappe.throw(
+					_("Only the assigned Reviewer (<b>{0}</b>) or a Marketing Lead can review this deliverable.").format(self.reviewer_technical or "Reviewer"),
+					frappe.PermissionError
+				)
+
+		# Drafting / Resubmission transitions: ONLY writer or Lead
+		if prev_state in ["Briefed", "In Revision"] and curr_state == "In Progress":
+			if is_doc_reviewer and not is_doc_writer and not is_lead:
+				frappe.throw(
+					_("Only the assigned Writer (<b>{0}</b>) can accept the brief and work on drafts.").format(self.assigned_to or "Writer"),
+					frappe.PermissionError
+				)
+
+		if prev_state == "In Progress" and curr_state == "In Review":
+			if is_doc_reviewer and not is_doc_writer and not is_lead:
+				frappe.throw(
+					_("Only the assigned Writer (<b>{0}</b>) can submit this deliverable for review.").format(self.assigned_to or "Writer"),
+					frappe.PermissionError
+				)
+
+		# Publishing transition: ONLY Lead / Publisher (not writer)
+		if prev_state == "Approved" and curr_state == "Published":
+			from oda_marketing.permissions import get_default_publisher
+			publisher = get_default_publisher()
+			is_publisher = user_lower == (publisher or "").lower()
+			if not (is_lead or is_publisher):
+				frappe.throw(_("Only Marketing Leads and Publishers can mark deliverables as Published."), frappe.PermissionError)
 
 	def before_insert(self):
 		if self.assigned_to:
@@ -33,20 +139,37 @@ class ContentItem(Document):
 			if getattr(settings, "sla_reminder_enabled", 0):
 				self.reminder_1_days_before = int(getattr(settings, "sla_reminder_days_before", 3) or 3)
 
-	def auto_assign_writer_role(self):
-		"""Auto-assign Content Writer role to assigned_to user if they do not hold any marketing role yet."""
-		if self.assigned_to and frappe.db.exists("User", self.assigned_to):
-			user_roles = frappe.get_roles(self.assigned_to)
-			if "Content Writer" not in user_roles:
-				user_doc = frappe.get_doc("User", self.assigned_to)
-				user_doc.append("roles", {"role": "Content Writer"})
-				user_doc.flags.ignore_permissions = True
-				user_doc.save(ignore_permissions=True)
-				frappe.msgprint(
-					_("Role <b>Content Writer</b> has been automatically assigned to user <b>{0}</b>.").format(self.assigned_to),
-					alert=True,
-					indicator="green"
+	def validate_assigned_to_reviewer_mutual_exclusion(self):
+		"""Ensures the assigned writer cannot review their own content."""
+		if self.assigned_to and self.reviewer_technical:
+			if self.assigned_to.strip().lower() == self.reviewer_technical.strip().lower():
+				frappe.throw(
+					_("The <b>Assigned To</b> writer cannot be the same user as the <b>Reviewer</b>. A creator cannot review their own deliverable."),
+					frappe.ValidationError
 				)
+
+	def get_user_effective_role(self, user=None):
+		"""Determines the user's role specifically in the context of THIS document."""
+		if not user:
+			user = frappe.session.user
+		if user == "Administrator":
+			return "Lead"
+		user_lower = (user or "").lower()
+		assigned_lower = (self.assigned_to or "").lower()
+		reviewer_lower = (self.reviewer_technical or "").lower()
+
+		# Document-level authorship takes precedence: an author is strictly a Writer for this doc
+		if user_lower == assigned_lower:
+			return "Writer"
+		if user_lower == reviewer_lower:
+			return "Reviewer"
+
+		roles = frappe.get_roles(user)
+		if "Marketing Lead" in roles or "System Manager" in roles:
+			return "Lead"
+		if "Technical Reviewer" in roles:
+			return "Reviewer"
+		return "Writer"
 
 	def validate_description_length(self):
 		if self.description and len(str(self.description).strip()) > 500:
@@ -54,6 +177,7 @@ class ContentItem(Document):
 				_("<b>Description</b> exceeds maximum limit of 500 characters. (Current length: {0} characters)").format(len(str(self.description).strip())),
 				frappe.ValidationError
 			)
+
 
 	def is_lead_user(self):
 		user = frappe.session.user
@@ -78,7 +202,8 @@ class ContentItem(Document):
 	def validate_metadata_edit_permissions(self):
 		if frappe.flags.ignore_permissions or self.flags.ignore_permissions:
 			return
-		if not self.is_new() and not self.is_lead_user():
+		effective_role = self.get_user_effective_role()
+		if not self.is_new() and effective_role != "Lead":
 			before = self.get_doc_before_save()
 			if not before:
 				return
@@ -103,7 +228,7 @@ class ContentItem(Document):
 		"""Content Writer cannot edit attachments or notes while item is in Planned state."""
 		if frappe.flags.ignore_permissions or self.flags.ignore_permissions:
 			return
-		if self.is_lead_user():
+		if self.get_user_effective_role() == "Lead":
 			return
 		if getattr(self, "workflow_state", None) != "Planned":
 			return
@@ -126,9 +251,10 @@ class ContentItem(Document):
 		"""Technical Reviewer cannot edit attachments, notes, or metadata - only revision_feedback_notes, reviewer_copilot_instructions, and workflow_state (via workflow actions)."""
 		if frappe.flags.ignore_permissions or self.flags.ignore_permissions:
 			return
-		if self.is_lead_user():
+		effective_role = self.get_user_effective_role()
+		if effective_role == "Lead":
 			return
-		if not self.is_reviewer_user():
+		if effective_role != "Reviewer":
 			return
 
 		before = self.get_doc_before_save()
@@ -505,37 +631,533 @@ def send_overdue_sla_notifications():
 	frappe.db.commit()
 
 
-@frappe.whitelist()
-def get_reviewer_users(doctype, txt, searchfield, start, page_len, filters):
-	"""Filters Reviewer link dropdown to only show enabled System Users holding the Technical Reviewer role."""
-	return frappe.db.sql("""
-		SELECT DISTINCT u.name, CONCAT_WS(' ', u.first_name, u.last_name)
-		FROM `tabUser` u
-		INNER JOIN `tabHas Role` r ON r.parent = u.name
-		WHERE u.enabled = 1 AND u.user_type = 'System User'
-		AND r.role = 'Technical Reviewer'
-		AND (u.name LIKE %s OR u.first_name LIKE %s OR u.last_name LIKE %s)
-		ORDER BY u.name ASC
-		LIMIT %s, %s
-	""", (f"%{txt}%", f"%{txt}%", f"%{txt}%", int(start or 0), int(page_len or 20)))
+import io
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 
 
 @frappe.whitelist()
-def get_assigned_to_users(doctype, txt, searchfield, start, page_len, filters):
-	"""Filters Assigned To link dropdown to show enabled System Users EXCEPT Administrator and users holding Marketing Lead, Technical Reviewer, or System Manager role."""
-	return frappe.db.sql("""
+def get_reviewer_users(doctype=None, txt="", searchfield="name", start=0, page_len=20, filters=None):
+	"""Filters Reviewer link dropdown to show active System Users holding Technical Reviewer, Marketing Lead, or System Manager role. Excludes the assigned writer if provided."""
+	exclude_user = None
+	if isinstance(filters, dict):
+		exclude_user = filters.get("assigned_to") or filters.get("exclude_user")
+	elif isinstance(filters, str):
+		try:
+			import json
+			parsed = json.loads(filters)
+			if isinstance(parsed, dict):
+				exclude_user = parsed.get("assigned_to") or parsed.get("exclude_user")
+		except Exception:
+			pass
+
+	conditions = [
+		"u.enabled = 1",
+		"u.user_type = 'System User'",
+		"(r.role IN ('Technical Reviewer', 'Marketing Lead', 'System Manager') OR u.name = 'Administrator')"
+	]
+	params = []
+	if exclude_user:
+		conditions.append("u.name != %s")
+		params.append(exclude_user)
+
+	conditions.append("(u.name LIKE %s OR u.first_name LIKE %s OR u.last_name LIKE %s)")
+	params.extend([f"%{txt}%", f"%{txt}%", f"%{txt}%"])
+	params.extend([int(start or 0), int(page_len or 20)])
+
+	where_clause = " AND ".join(conditions)
+	return frappe.db.sql(f"""
 		SELECT DISTINCT u.name, CONCAT_WS(' ', u.first_name, u.last_name)
 		FROM `tabUser` u
-		WHERE u.enabled = 1 AND u.user_type = 'System User'
-		AND u.name != 'Administrator'
-		AND u.name NOT IN (
-			SELECT DISTINCT parent FROM `tabHas Role`
-			WHERE role IN ('Marketing Lead', 'Technical Reviewer', 'System Manager')
-		)
-		AND (u.name LIKE %s OR u.first_name LIKE %s OR u.last_name LIKE %s)
+		LEFT JOIN `tabHas Role` r ON r.parent = u.name
+		WHERE {where_clause}
 		ORDER BY u.name ASC
 		LIMIT %s, %s
-	""", (f"%{txt}%", f"%{txt}%", f"%{txt}%", int(start or 0), int(page_len or 20)))
+	""", tuple(params))
+
+
+
+@frappe.whitelist()
+def get_assigned_to_users(doctype=None, txt="", searchfield="name", start=0, page_len=20, filters=None):
+	"""Filters Assigned To link dropdown to show active System Users. Excludes the reviewer if provided."""
+	exclude_user = None
+	if isinstance(filters, dict):
+		exclude_user = filters.get("reviewer_technical") or filters.get("exclude_user")
+	elif isinstance(filters, str):
+		try:
+			import json
+			parsed = json.loads(filters)
+			if isinstance(parsed, dict):
+				exclude_user = parsed.get("reviewer_technical") or parsed.get("exclude_user")
+		except Exception:
+			pass
+
+	conditions = ["u.enabled = 1", "u.user_type = 'System User'", "u.name != 'Administrator'"]
+	params = []
+	if exclude_user:
+		conditions.append("u.name != %s")
+		params.append(exclude_user)
+
+	conditions.append("(u.name LIKE %s OR u.first_name LIKE %s OR u.last_name LIKE %s)")
+	params.extend([f"%{txt}%", f"%{txt}%", f"%{txt}%"])
+	params.extend([int(start or 0), int(page_len or 20)])
+
+	where_clause = " AND ".join(conditions)
+	return frappe.db.sql(f"""
+		SELECT DISTINCT u.name, CONCAT_WS(' ', u.first_name, u.last_name)
+		FROM `tabUser` u
+		WHERE {where_clause}
+		ORDER BY u.name ASC
+		LIMIT %s, %s
+	""", tuple(params))
+
+
+@frappe.whitelist()
+def download_content_item_template():
+	"""Generates and downloads a standardized Excel template (.xlsx) for bulk Content Item importing."""
+	if not frappe.has_permission("Content Item", "create"):
+		frappe.throw(_("You do not have permission to import Content Items."), frappe.PermissionError)
+
+	wb = openpyxl.Workbook()
+	ws = wb.active
+	ws.title = "Content Items"
+
+	# Styles
+	header_fill = PatternFill(start_color="4F46E5", end_color="4F46E5", fill_type="solid")
+	header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+	center_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+	left_align = Alignment(horizontal="left", vertical="center", wrap_text=True)
+	border_thin = Side(style="thin", color="CBD5E1")
+	cell_border = Border(left=border_thin, right=border_thin, top=border_thin, bottom=border_thin)
+
+	headers = [
+		("Title*", 32, "Required. Title of the content deliverable."),
+		("Format*", 18, "Required. Format option (e.g., Blog, Poll, Flowchart, Carousel)."),
+		("Description*", 45, "Required. Topic/brief description (max 500 characters)."),
+		("Industry Domain", 22, "Optional. Target domain (e.g., HCLS, Fintech, Pharma Supply Chain)."),
+		("Content Calendar", 28, "Optional. Calendar name (e.g., 2026 Marketing Calendar)."),
+		("Planned Publish Date*", 22, "YYYY-MM-DD. Target live publishing date."),
+		("Due Date*", 20, "YYYY-MM-DD. Writer submission due date."),
+		("Assigned To*", 26, "Required. Email of assigned writer/creator."),
+		("Reviewer*", 26, "Required. Email of technical reviewer (Must differ from Assigned To)."),
+		("Notes", 35, "Optional. Initial notes or drafting pointers.")
+	]
+
+	for col_num, (header_text, width, _) in enumerate(headers, 1):
+		cell = ws.cell(row=1, column=col_num, value=header_text)
+		cell.fill = header_fill
+		cell.font = header_font
+		cell.alignment = center_align
+		cell.border = cell_border
+		col_letter = get_column_letter(col_num)
+		ws.column_dimensions[col_letter].width = width
+
+	# Sample data rows
+	formats = frappe.get_all("Content Item Option", filters={"option_type": "Format", "is_active": 1}, pluck="option_label")
+	default_format = formats[0] if formats else "Blog"
+	domains = frappe.get_all("Content Item Option", filters={"option_type": "Industry Domain", "is_active": 1}, pluck="option_label")
+	default_domain = domains[0] if domains else "HCLS"
+	active_cal = frappe.get_all("Content Calendar", filters={"status": "Active"}, pluck="name")
+	default_cal = active_cal[0] if active_cal else ""
+
+	sample_rows = [
+		[
+			"Mastering Multi-Cloud Governance in 2026",
+			default_format,
+			"Comprehensive guide covering enterprise multi-cloud governance and FinOps best practices.",
+			default_domain,
+			default_cal,
+			"2026-09-15",
+			"2026-09-01",
+			frappe.session.user if frappe.session.user != "Administrator" else "writer@example.com",
+			"reviewer@example.com",
+			"Include key stats on cloud cost savings."
+		],
+		[
+			"AI In Clinical Trials: Adoption Poll",
+			"Poll" if "Poll" in formats else default_format,
+			"Interactive survey on clinical trial workflow automation challenges.",
+			default_domain,
+			default_cal,
+			"2026-09-20",
+			"2026-09-10",
+			"writer2@example.com",
+			"reviewer@example.com",
+			"Target 4 distinct choice options."
+		]
+	]
+
+	sample_font = Font(name="Calibri", size=10)
+	for row_idx, row_data in enumerate(sample_rows, 2):
+		for col_idx, val in enumerate(row_data, 1):
+			c = ws.cell(row=row_idx, column=col_idx, value=val)
+			c.font = sample_font
+			c.alignment = left_align
+			c.border = cell_border
+
+	ws.row_dimensions[1].height = 28
+	ws.row_dimensions[2].height = 22
+	ws.row_dimensions[3].height = 22
+
+	# Reference sheet for available options
+	ws_ref = wb.create_sheet(title="Allowed Options")
+	ws_ref.cell(row=1, column=1, value="Active Formats").font = Font(bold=True)
+	ws_ref.cell(row=1, column=2, value="Industry Domains").font = Font(bold=True)
+	ws_ref.cell(row=1, column=3, value="Active Calendars").font = Font(bold=True)
+
+	for i, f in enumerate(formats, 2):
+		ws_ref.cell(row=i, column=1, value=f)
+	for i, d in enumerate(domains, 2):
+		ws_ref.cell(row=i, column=2, value=d)
+	for i, c in enumerate(active_cal, 2):
+		ws_ref.cell(row=i, column=3, value=c)
+
+	output = io.BytesIO()
+	wb.save(output)
+	output.seek(0)
+
+	frappe.response["filename"] = "Content_Item_Import_Template.xlsx"
+	frappe.response["filecontent"] = output.getvalue()
+	frappe.response["type"] = "binary"
+
+
+@frappe.whitelist()
+def import_content_items_from_excel(file_url=None, default_calendar=None):
+	"""Parses an uploaded .xlsx or .csv spreadsheet and imports Content Items into 'Planned' status."""
+	if not frappe.has_permission("Content Item", "create"):
+		frappe.throw(_("Only Marketing Leads and Administrators can import Content Items."), frappe.PermissionError)
+
+	if not file_url:
+		frappe.throw(_("Please provide an uploaded file URL to import."), frappe.ValidationError)
+
+	# Read file from filesystem
+	file_doc = frappe.get_doc("File", {"file_url": file_url}) if frappe.db.exists("File", {"file_url": file_url}) else None
+	if file_doc:
+		file_path = file_doc.get_full_path()
+	else:
+		file_path = frappe.get_site_path("public", file_url.lstrip("/"))
+
+	import os
+	if not os.path.exists(file_path):
+		frappe.throw(_("File not found on server at {0}").format(file_path), frappe.DoesNotExistError)
+
+	# Determine default calendar fallback
+	if not default_calendar:
+		settings = frappe.get_single("Marketing Settings")
+		default_calendar = getattr(settings, "default_content_calendar", None)
+		if not default_calendar or not frappe.db.exists("Content Calendar", default_calendar):
+			active_cals = frappe.get_all("Content Calendar", filters={"status": "Active"}, limit=1, pluck="name")
+			default_calendar = active_cals[0] if active_cals else None
+
+	rows_data = []
+
+	if file_path.endswith(".csv"):
+		import csv
+		with open(file_path, "r", encoding="utf-8-sig") as f:
+			reader = csv.reader(f)
+			raw_rows = list(reader)
+			if raw_rows:
+				header = [str(h).strip().lower().replace("*", "").replace(" ", "_") for h in raw_rows[0]]
+				for r in raw_rows[1:]:
+					if any(str(c).strip() for c in r):
+						rows_data.append(dict(zip(header, [str(c).strip() for c in r])))
+	else:
+		wb = openpyxl.load_workbook(file_path, data_only=True)
+		ws = wb.active
+		raw_rows = list(ws.iter_rows(values_only=True))
+		if raw_rows:
+			raw_header = raw_rows[0]
+			header = [str(h).strip().lower().replace("*", "").replace(" ", "_") if h is not None else "" for h in raw_header]
+			for r in raw_rows[1:]:
+				if any(c is not None and str(c).strip() for c in r):
+					row_dict = {}
+					for idx, col_name in enumerate(header):
+						if col_name and idx < len(r):
+							val = r[idx]
+							if isinstance(val, (frappe.utils.datetime.date, frappe.utils.datetime.datetime)):
+								val = str(val)[:10]
+							row_dict[col_name] = str(val).strip() if val is not None else ""
+					rows_data.append(row_dict)
+
+	if not rows_data:
+		frappe.throw(_("The uploaded file does not contain any valid data rows."), frappe.ValidationError)
+
+	created_items = []
+	errors = []
+
+	# Cache active options
+	valid_formats = set(frappe.get_all("Content Item Option", filters={"option_type": "Format", "is_active": 1}, pluck="option_label"))
+	valid_domains = set(frappe.get_all("Content Item Option", filters={"option_type": "Industry Domain", "is_active": 1}, pluck="option_label"))
+
+	for idx, row in enumerate(rows_data, start=2):
+		row_num = idx
+		title = row.get("title") or row.get("deliverable_title") or row.get("name")
+		content_type = row.get("format") or row.get("content_type") or row.get("type")
+		description = row.get("description") or row.get("topic") or row.get("brief")
+		industry_domain = row.get("industry_domain") or row.get("practice_area") or row.get("domain")
+		calendar = row.get("content_calendar") or row.get("calendar") or default_calendar
+		planned_pub_date = row.get("planned_publish_date") or row.get("publish_date")
+		due_date = row.get("due_date") or row.get("sla_due_date")
+		assigned_to = row.get("assigned_to") or row.get("writer") or row.get("author")
+		reviewer = row.get("reviewer") or row.get("reviewer_technical") or row.get("technical_reviewer")
+		notes = row.get("notes") or row.get("remarks")
+
+		# Validation
+		row_errors = []
+		if not title:
+			row_errors.append("Title is mandatory")
+		if not content_type:
+			row_errors.append("Format is mandatory")
+		elif content_type not in valid_formats:
+			# Case-insensitive match check
+			matched = next((f for f in valid_formats if f.lower() == content_type.lower()), None)
+			if matched:
+				content_type = matched
+			else:
+				row_errors.append(f"Invalid Format '{content_type}'. Allowed: {', '.join(sorted(valid_formats))}")
+
+		if not description:
+			row_errors.append("Description is mandatory")
+		elif len(description) > 500:
+			row_errors.append(f"Description exceeds 500 characters ({len(description)} chars)")
+
+		if industry_domain and industry_domain not in valid_domains:
+			matched_d = next((d for d in valid_domains if d.lower() == industry_domain.lower()), None)
+			if matched_d:
+				industry_domain = matched_d
+
+		if not calendar:
+			row_errors.append("Content Calendar is required (none specified or found active)")
+		elif not frappe.db.exists("Content Calendar", calendar):
+			row_errors.append(f"Content Calendar '{calendar}' does not exist")
+
+		if not planned_pub_date:
+			row_errors.append("Planned Publish Date is mandatory")
+
+		if not due_date:
+			if planned_pub_date:
+				try:
+					due_date = str(add_days(getdate(planned_pub_date), -7))
+				except Exception:
+					row_errors.append("Due Date is mandatory")
+			else:
+				row_errors.append("Due Date is mandatory")
+
+		if not assigned_to:
+			row_errors.append("Assigned To writer is mandatory")
+		elif not frappe.db.exists("User", assigned_to):
+			row_errors.append(f"Assigned To user '{assigned_to}' does not exist")
+
+		if not reviewer:
+			row_errors.append("Reviewer is mandatory")
+		elif not frappe.db.exists("User", reviewer):
+			row_errors.append(f"Reviewer user '{reviewer}' does not exist")
+
+		if assigned_to and reviewer and assigned_to.strip().lower() == reviewer.strip().lower():
+			row_errors.append(f"Assigned To and Reviewer cannot be the same user ({assigned_to})")
+
+		if row_errors:
+			errors.append({
+				"row": row_num,
+				"title": title or f"Row {row_num}",
+				"errors": row_errors
+			})
+			continue
+
+		try:
+			doc = frappe.get_doc({
+				"doctype": "Content Item",
+				"title": title,
+				"content_type": content_type,
+				"description": description,
+				"industry_domain": industry_domain or None,
+				"content_calendar": calendar,
+				"planned_publish_date": planned_pub_date,
+				"due_date": due_date,
+				"assigned_to": assigned_to,
+				"reviewer_technical": reviewer,
+				"notes": notes or None,
+				"status": "Planned",
+				"workflow_state": "Planned",
+				"risk_flag": "On track",
+				"ai_review_status": "Not Started"
+			})
+			doc.insert(ignore_permissions=True)
+			created_items.append({
+				"name": doc.name,
+				"title": doc.title,
+				"assigned_to": doc.assigned_to,
+				"status": "Planned"
+			})
+		except Exception as e:
+			errors.append({
+				"row": row_num,
+				"title": title or f"Row {row_num}",
+				"errors": [str(e)]
+			})
+
+	frappe.db.commit()
+
+	return {
+		"success": len(created_items) > 0,
+		"total_rows": len(rows_data),
+		"created_count": len(created_items),
+		"error_count": len(errors),
+		"created_items": created_items,
+		"errors": errors
+	}
+
+
+@frappe.whitelist()
+def get_dashboard_metrics(calendar=None, year=None, month=None, format=None, domain=None, risk=None):
+	"""Aggregates real-time metrics, KPI numbers, and chart distributions for the Executive Marketing Dashboard."""
+	user = frappe.session.user
+	roles = frappe.get_roles(user)
+	is_lead = user == "Administrator" or "Marketing Lead" in roles or "System Manager" in roles
+
+	if not is_lead:
+		frappe.throw(_("Access Restricted: Only Marketing Leads and System Managers can access the Marketing Operations Dashboard."), frappe.PermissionError)
+
+	conditions = []
+	params = {}
+
+
+	# Calendar filter
+	if calendar and calendar != "All":
+		conditions.append("content_calendar = %(calendar)s")
+		params["calendar"] = calendar
+
+	# Year and Month filters on planned_publish_date
+	if year and str(year) != "All":
+		conditions.append("YEAR(planned_publish_date) = %(year)s")
+		params["year"] = int(year)
+
+	if month and str(month) not in ["All", "0", ""]:
+		try:
+			m_int = int(month)
+			conditions.append("MONTH(planned_publish_date) = %(month)s")
+			params["month"] = m_int
+		except Exception:
+			pass
+
+	# Format filter
+	if format and format != "All":
+		conditions.append("content_type = %(format)s")
+		params["format"] = format
+
+	# Industry Domain filter
+	if domain and domain != "All":
+		conditions.append("industry_domain = %(domain)s")
+		params["domain"] = domain
+
+	# Risk Status filter
+	if risk and risk != "All":
+		conditions.append("risk_flag = %(risk)s")
+		params["risk"] = risk
+
+	where_str = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
+	# Fetch raw item data matching filter
+	items = frappe.db.sql(f"""
+		SELECT
+			name, title, status, workflow_state, content_type,
+			industry_domain, planned_publish_date, due_date,
+			risk_flag, ai_score, assigned_to, reviewer_technical
+		FROM `tabContent Item`
+		{where_str}
+	""", params, as_dict=True)
+
+	# KPI Counters
+	counts = {
+		"total": len(items),
+		"planned": 0,
+		"briefed": 0,
+		"in_progress": 0,
+		"in_review": 0,
+		"in_revision": 0,
+		"approved": 0,
+		"published": 0,
+		"late_risk": 0,
+		"avg_ai_score": 0.0
+	}
+
+	status_dist = {
+		"Planned": 0, "Briefed": 0, "In Progress": 0,
+		"In Review": 0, "In Revision": 0, "Approved": 0, "Published": 0
+	}
+	format_dist = {}
+	domain_dist = {}
+	risk_dist = {"On track": 0, "At risk": 0, "Late": 0}
+	monthly_trend = {m: 0 for m in range(1, 13)}
+
+	ai_scores = []
+
+	for it in items:
+		st = it.workflow_state or it.status or "Planned"
+		if st in status_dist:
+			status_dist[st] += 1
+		else:
+			status_dist[st] = 1
+
+		# Key count mapping
+		key = st.lower().replace(" ", "_")
+		if key in counts:
+			counts[key] += 1
+
+		# Formats
+		fmt = it.content_type or "Unassigned"
+		format_dist[fmt] = format_dist.get(fmt, 0) + 1
+
+		# Domains
+		dom = it.industry_domain or "General"
+		domain_dist[dom] = domain_dist.get(dom, 0) + 1
+
+		# Risk
+		rf = it.risk_flag or "On track"
+		risk_dist[rf] = risk_dist.get(rf, 0) + 1
+		if rf == "Late":
+			counts["late_risk"] += 1
+
+		# AI Scores
+		if it.ai_score is not None and it.ai_score > 0:
+			ai_scores.append(float(it.ai_score))
+
+		# Monthly trend
+		if it.planned_publish_date:
+			try:
+				d = getdate(it.planned_publish_date)
+				monthly_trend[d.month] += 1
+			except Exception:
+				pass
+
+	if ai_scores:
+		counts["avg_ai_score"] = round(sum(ai_scores) / len(ai_scores), 1)
+
+	# Active options for filter dropdowns
+	calendars = frappe.get_all("Content Calendar", fields=["name", "status", "from_date", "to_date"], order_by="creation desc")
+	formats = frappe.get_all("Content Item Option", filters={"option_type": "Format", "is_active": 1}, pluck="option_label")
+	domains = frappe.get_all("Content Item Option", filters={"option_type": "Industry Domain", "is_active": 1}, pluck="option_label")
+
+	month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+	monthly_series = [
+		{"month": month_names[m - 1], "month_num": m, "count": monthly_trend[m]}
+		for m in range(1, 13)
+	]
+
+	return {
+		"kpis": counts,
+		"status_distribution": status_dist,
+		"format_distribution": format_dist,
+		"domain_distribution": domain_dist,
+		"risk_distribution": risk_dist,
+		"monthly_trend": monthly_series,
+		"calendars": calendars,
+		"formats": formats,
+		"domains": domains,
+		"is_lead": is_lead
+	}
+
 
 
 @frappe.whitelist()
@@ -544,8 +1166,15 @@ def trigger_ai_copilot(docname):
 	if not frappe.db.exists("Content Item", docname):
 		frappe.throw(_("Content Item {0} not found.").format(docname), frappe.DoesNotExistError)
 
-	if not frappe.has_permission("Content Item", "write", doc=docname):
-		frappe.throw(_("You do not have permission to trigger AI Copilot Review on this Content Item."), frappe.PermissionError)
+	doc = frappe.get_doc("Content Item", docname)
+	user = (frappe.session.user or "").lower()
+	assigned = (doc.assigned_to or "").lower()
+	roles = frappe.get_roles(user)
+	is_lead = user == "administrator" or "Marketing Lead" in roles or "System Manager" in roles
+
+	# Strict document-level role check: Writer copilot can only be run by the assigned writer or a lead
+	if user != assigned and not is_lead:
+		frappe.throw(_("Only the assigned writer ({0}) or a Marketing Lead can run Writer Copilot Review.").format(doc.assigned_to), frappe.PermissionError)
 
 	settings = frappe.get_single("Marketing Settings")
 	if not getattr(settings, "enable_ai_copilot", 0):
@@ -555,7 +1184,6 @@ def trigger_ai_copilot(docname):
 		)
 
 	# Check primary content draft is attached
-	doc = frappe.get_doc("Content Item", docname)
 	if not (doc.content_file_1 or "").strip():
 		frappe.throw(
 			_("<b>Primary Content Draft</b> is mandatory to run AI Copilot Review. Please attach a draft file first."),
@@ -571,25 +1199,45 @@ def trigger_ai_copilot(docname):
 			frappe.ValidationError
 		)
 
-	frappe.enqueue(
-		"oda_marketing.oda_marketing.ai_engine.runner.run_ai_review",
-		queue="long",
-		timeout=300,
-		docname=docname,
-		review_type="Writer"
-	)
-	doc.db_set("ai_review_status", "Queued", update_modified=False)
+	print(f"\n================================================================================", flush=True)
+	print(f"🎯 [COPILOT API TRIGGERED] Content Item: {docname} | Initiated by: {user} (Writer Review)", flush=True)
+	print(f"================================================================================\n", flush=True)
+
+	from oda_marketing.oda_marketing.ai_engine.runner import run_ai_review
+	try:
+		run_ai_review(docname=docname, review_type="Writer")
+	except Exception as e:
+		frappe.log_error(f"AI Copilot execution error: {str(e)}")
+		print(f"\n❌ [AI REVIEW EXECUTION ERROR] {str(e)}\n", flush=True)
+		raise
+
 	return frappe.get_doc("Content Item", docname)
 
 
 @frappe.whitelist()
 def trigger_reviewer_copilot(docname, instructions=None):
-	"""Reviewer-triggered Copilot review with custom instructions via Background Job Enqueueing."""
+	"""Reviewer-triggered Copilot review with custom instructions via Immediate Execution."""
 	if not frappe.db.exists("Content Item", docname):
 		frappe.throw(_("Content Item {0} not found.").format(docname), frappe.DoesNotExistError)
 
-	if not frappe.has_permission("Content Item", "write", doc=docname):
-		frappe.throw(_("You do not have permission to trigger AI Copilot Review on this Content Item."), frappe.PermissionError)
+	doc = frappe.get_doc("Content Item", docname)
+	user = (frappe.session.user or "").lower()
+	assigned = (doc.assigned_to or "").lower()
+	reviewer = (doc.reviewer_technical or "").lower()
+	roles = frappe.get_roles(user)
+	is_doc_writer = (user == assigned)
+	is_lead = user == "administrator" or "Marketing Lead" in roles or "System Manager" in roles
+
+	# The writer on this document must NEVER run the Reviewer Copilot, regardless of global roles
+	if is_doc_writer:
+		frappe.throw(
+			_("As the assigned writer, you cannot run the Reviewer Copilot on your own deliverable. Only the designated Reviewer ({0}) or a non-author Lead can do this.").format(doc.reviewer_technical or "Reviewer"),
+			frappe.PermissionError
+		)
+
+	# Strict document-level role check: Reviewer copilot can only be run by the assigned reviewer or a lead (who is not the writer)
+	if user != reviewer and not is_lead:
+		frappe.throw(_("Only the designated Reviewer ({0}) can run Reviewer Copilot Review.").format(doc.reviewer_technical), frappe.PermissionError)
 
 	settings = frappe.get_single("Marketing Settings")
 	if not getattr(settings, "enable_ai_copilot", 0):
@@ -599,7 +1247,6 @@ def trigger_reviewer_copilot(docname, instructions=None):
 		)
 
 	# Check primary content draft is attached
-	doc = frappe.get_doc("Content Item", docname)
 	if not (doc.content_file_1 or "").strip():
 		frappe.throw(
 			_("<b>Primary Content Draft</b> is mandatory to run AI Copilot Review. Please attach a draft file first."),
@@ -619,16 +1266,23 @@ def trigger_reviewer_copilot(docname, instructions=None):
 	if instructions:
 		doc.db_set("reviewer_copilot_instructions", instructions, update_modified=False)
 
-	frappe.enqueue(
-		"oda_marketing.oda_marketing.ai_engine.runner.run_ai_review",
-		queue="long",
-		timeout=300,
-		docname=docname,
-		reviewer_instructions=instructions,
-		review_type="Reviewer"
-	)
-	doc.db_set("ai_review_status", "Queued", update_modified=False)
+	print(f"\n================================================================================", flush=True)
+	print(f"🎯 [COPILOT API TRIGGERED] Content Item: {docname} | Initiated by: {user} (Reviewer Review)", flush=True)
+	if instructions:
+		print(f"📝 Reviewer Instructions: {instructions}", flush=True)
+	print(f"================================================================================\n", flush=True)
+
+	from oda_marketing.oda_marketing.ai_engine.runner import run_ai_review
+	try:
+		run_ai_review(docname=docname, reviewer_instructions=instructions, review_type="Reviewer")
+	except Exception as e:
+		frappe.log_error(f"Reviewer Copilot execution error: {str(e)}")
+		print(f"\n❌ [REVIEWER AI EXECUTION ERROR] {str(e)}\n", flush=True)
+		raise
+
 	return frappe.get_doc("Content Item", docname)
+
+
 
 
 @frappe.whitelist()
@@ -643,3 +1297,4 @@ def get_ai_copilot_status():
 		}
 	except Exception:
 		return {"enable_ai_copilot": 0, "max_writer_copilot_reviews_per_item": 2, "max_reviewer_copilot_reviews_per_item": 2}
+

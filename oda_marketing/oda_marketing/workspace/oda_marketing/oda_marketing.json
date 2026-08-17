@@ -1,7 +1,7 @@
 {
     "app": "oda_marketing",
     "charts": [],
-    "content": "[{\"type\":\"header\",\"data\":{\"text\":\"ODA Marketing Operations\",\"level\":3}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Content Item\"}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Content Calendar\"}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Content Item Option\"}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Marketing Settings\"}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Env Variable\"}}]",
+    "content": "[{\"type\":\"header\",\"data\":{\"text\":\"ODA Marketing Operations\",\"level\":3}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Marketing Dashboard\"}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Content Item\"}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Content Calendar\"}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Content Item Option\"}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Marketing Settings\"}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Env Variable\"}}]",
     "creation": "2026-08-04 18:50:00",
     "docstatus": 0,
     "doctype": "Workspace",
@@ -11,7 +11,7 @@
     "is_hidden": 0,
     "label": "ODA Marketing",
     "links": [],
-    "modified": "2026-08-05 18:00:00",
+    "modified": "2026-08-14 14:30:00",
     "modified_by": "Administrator",
     "module": "ODA Marketing",
     "name": "ODA Marketing",
@@ -23,16 +23,24 @@
     "roles": [
         {"role": "System Manager"},
         {"role": "Marketing Lead"},
-        {"role": "Content Writer"},
-        {"role": "Technical Reviewer"}
+        {"role": "Technical Reviewer"},
+        {"role": "All"}
     ],
     "sequence_id": 1,
     "shortcuts": [
         {
             "color": "Grey",
+            "doc_view": "Page",
+            "icon": "dashboard",
+            "label": "Marketing Dashboard",
+            "link_to": "marketing-dashboard",
+            "type": "Page"
+        },
+        {
+            "color": "Grey",
             "doc_view": "List",
-            "icon": "tickets",
-            "label": "Content Item",
+            "icon": "clipboard-pen-line",
+            "label": "Content Items",
             "link_to": "Content Item",
             "type": "DocType"
         },

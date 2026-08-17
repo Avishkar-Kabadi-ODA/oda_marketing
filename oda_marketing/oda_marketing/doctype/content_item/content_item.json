@@ -72,7 +72,6 @@
    "fieldname": "content_type",
    "fieldtype": "Link",
    "in_list_view": 1,
-   "in_standard_filter": 1,
    "label": "Format",
    "options": "Content Item Option",
    "reqd": 1,
@@ -88,7 +87,6 @@
   {
    "fieldname": "industry_domain",
    "fieldtype": "Link",
-   "in_standard_filter": 1,
    "label": "Industry Domain",
    "options": "Content Item Option",
    "link_filters": "[[\"Content Item Option\", \"option_type\", \"=\", \"Industry Domain\"], [\"Content Item Option\", \"is_active\", \"=\", 1]]"
@@ -135,7 +133,6 @@
    "fieldname": "risk_flag",
    "fieldtype": "Select",
    "in_list_view": 1,
-   "in_standard_filter": 1,
    "label": "Risk Status",
    "options": "On track\nAt risk\nLate"
   },
@@ -207,7 +204,6 @@
    "label": "Revision Feedback / Notes"
   },
   {
-   "depends_on": "eval:doc.reviewer_copilot_instructions && (frappe.user.has_role('Technical Reviewer') || frappe.user.has_role('Marketing Lead') || frappe.user.has_role('System Manager') || frappe.session.user === 'Administrator')",
    "fieldname": "reviewer_copilot_instructions",
    "fieldtype": "Small Text",
    "label": "Reviewer Instructions for Copilot"
@@ -243,14 +239,12 @@
    "read_only": 1
   },
   {
-   "depends_on": "eval:doc.writer_copilot_feedback && (!frappe.user.has_role('Technical Reviewer') || frappe.user.has_role('Marketing Lead') || frappe.user.has_role('System Manager') || frappe.session.user === 'Administrator')",
    "fieldname": "writer_copilot_feedback",
    "fieldtype": "Text Editor",
    "label": "Writer Copilot Feedback & Improvements",
    "read_only": 1
   },
   {
-   "depends_on": "eval:doc.reviewer_copilot_feedback && (frappe.user.has_role('Technical Reviewer') || frappe.user.has_role('Marketing Lead') || frappe.user.has_role('System Manager') || frappe.session.user === 'Administrator')",
    "fieldname": "reviewer_copilot_feedback",
    "fieldtype": "Text Editor",
    "label": "Reviewer Copilot Feedback & Improvements",
@@ -336,6 +330,18 @@
    "report": 1,
    "role": "Technical Reviewer",
    "share": 1,
+   "write": 1
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 1,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "All",
+   "share": 0,
    "write": 1
   }
  ],

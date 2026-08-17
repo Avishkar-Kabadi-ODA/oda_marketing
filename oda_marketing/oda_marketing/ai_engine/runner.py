@@ -44,6 +44,8 @@ def run_ai_review(docname, reviewer_instructions=None, review_type="Writer"):
 		assigned_user = doc.assigned_to or doc.owner
 		publish_stream_event(docname, assigned_user, "Stage 1: Triggering Prompt Generator Subagent...", progress=10)
 
+		print(f"\n🚀 [AI COPILOT JOB STARTED] Deliverable: {docname} | Review Type: {review_type} | User: {assigned_user}", flush=True)
+
 		# Stage 1: Generate dynamic system prompt via Subagent
 		dynamic_prompt = generate_dynamic_system_prompt(doc, reviewer_instructions=reviewer_instructions)
 		doc.db_set("ai_generated_prompt", dynamic_prompt, update_modified=False)
@@ -79,6 +81,8 @@ def run_ai_review(docname, reviewer_instructions=None, review_type="Writer"):
 			"feedback": feedback,
 			"system_prompt": dynamic_prompt
 		})
+
+		print(f"✅ [AI COPILOT JOB COMPLETED] Deliverable: {docname} | Score: {score}% | Verdict: {verdict_label}\n", flush=True)
 
 		publish_stream_event(
 			docname, assigned_user,

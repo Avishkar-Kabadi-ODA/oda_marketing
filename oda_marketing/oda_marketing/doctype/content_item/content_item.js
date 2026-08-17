@@ -23,19 +23,26 @@ frappe.ui.form.on("Content Item", {
 
 		frm.set_query("reviewer_technical", function() {
 			return {
-				query: "oda_marketing.oda_marketing.doctype.content_item.content_item.get_reviewer_users"
+				query: "oda_marketing.oda_marketing.doctype.content_item.content_item.get_reviewer_users",
+				filters: {
+					assigned_to: frm.doc.assigned_to || ""
+				}
 			};
 		});
 
 		frm.set_query("assigned_to", function() {
 			return {
-				query: "oda_marketing.oda_marketing.doctype.content_item.content_item.get_assigned_to_users"
+				query: "oda_marketing.oda_marketing.doctype.content_item.content_item.get_assigned_to_users",
+				filters: {
+					reviewer_technical: frm.doc.reviewer_technical || ""
+				}
 			};
 		});
 	},
 
 	refresh(frm) {
 		frm.trigger("apply_role_field_permissions");
+		frm.trigger("filter_workflow_actions");
 		frm.trigger("update_description_inline_counter");
 
 		if (frm.doc.content_calendar) {
@@ -50,9 +57,15 @@ frappe.ui.form.on("Content Item", {
 				const enable_ai = res && res.message ? res.message.enable_ai_copilot : 0;
 				const max_writer_reviews = res && res.message ? res.message.max_writer_copilot_reviews_per_item : 2;
 				const max_reviewer_reviews = res && res.message ? res.message.max_reviewer_copilot_reviews_per_item : 2;
-				const is_lead = frappe.user.has_role("Marketing Lead") || frappe.user.has_role("System Manager") || frappe.session.user === "Administrator";
-				const is_reviewer = frappe.user.has_role("Technical Reviewer");
-				const is_writer = (frappe.user.has_role("Content Writer") || is_lead) && !is_reviewer;
+
+				const current_user = (frappe.session.user || "").toLowerCase();
+				const doc_assigned = (frm.doc.assigned_to || "").toLowerCase();
+				const doc_reviewer = (frm.doc.reviewer_technical || "").toLowerCase();
+
+				const is_doc_writer = (current_user === doc_assigned);
+				const is_doc_reviewer = (current_user === doc_reviewer);
+				const is_global_lead = frappe.user.has_role("Marketing Lead") || frappe.user.has_role("System Manager") || frappe.session.user === "Administrator";
+				const is_lead = is_global_lead && !is_doc_writer;
 
 				const has_primary_draft = !!(frm.doc.content_file_1 && String(frm.doc.content_file_1).trim());
 
@@ -69,7 +82,7 @@ frappe.ui.form.on("Content Item", {
 						const writer_reviews = (frm.doc.ai_reviews || []).filter(r => r.review_type === "Writer");
 						const writer_limit_reached = writer_reviews.length >= max_writer_reviews;
 
-						if ((writer_copilot_states.includes(frm.doc.workflow_state) || frm.doc.ai_review_status === "Queued") && (is_writer || is_lead)) {
+						if ((writer_copilot_states.includes(frm.doc.workflow_state) || frm.doc.ai_review_status === "Queued") && (is_doc_writer || is_lead)) {
 							if (!writer_limit_reached) {
 								frm.add_custom_button(__("Run AI Copilot Review"), function() {
 									frappe.show_progress(__("Marketing Copilot Review"), 10, 100, __("Initiating AI Copilot Review..."));
@@ -88,7 +101,7 @@ frappe.ui.form.on("Content Item", {
 						const reviewer_reviews = (frm.doc.ai_reviews || []).filter(r => r.review_type === "Reviewer");
 						const reviewer_limit_reached = reviewer_reviews.length >= max_reviewer_reviews;
 
-						if (is_reviewer && frm.doc.workflow_state === "In Review") {
+						if ((is_doc_reviewer || (is_lead && !is_doc_writer)) && frm.doc.workflow_state === "In Review") {
 							if (!reviewer_limit_reached) {
 								frm.add_custom_button(__("Run Copilot Review (Reviewer)"), function() {
 									let d = new frappe.ui.Dialog({
@@ -145,7 +158,11 @@ frappe.ui.form.on("Content Item", {
 				if (data.progress >= 100) {
 					frappe.show_progress(__("Marketing Copilot Review"), 100, 100, data.message || __("Review complete!"));
 					setTimeout(() => {
-						frappe.hide_progress();
+						try {
+							frappe.hide_progress();
+							frappe.cur_progress = null;
+							$(".modal.progress-modal").modal("hide").remove();
+						} catch (e) {}
 						frappe.show_alert({ message: __("AI Copilot Review completed!"), indicator: "green" });
 						frm.reload_doc().then(() => {
 							frm.trigger("apply_role_field_permissions");
@@ -153,7 +170,11 @@ frappe.ui.form.on("Content Item", {
 						});
 					}, 600);
 				} else if (data.progress === 0 && (data.message || "").includes("failed")) {
-					frappe.hide_progress();
+					try {
+						frappe.hide_progress();
+						frappe.cur_progress = null;
+						$(".modal.progress-modal").modal("hide").remove();
+					} catch (e) {}
 					frappe.show_alert({ message: data.message, indicator: "red" });
 				} else {
 					frappe.show_progress(__("Marketing Copilot Review"), data.progress || 50, 100, data.message || __("Evaluating deliverable..."));
@@ -163,9 +184,14 @@ frappe.ui.form.on("Content Item", {
 	},
 
 	apply_role_field_permissions(frm) {
-		const is_lead = frappe.user.has_role("Marketing Lead") || frappe.user.has_role("System Manager") || frappe.session.user === "Administrator";
-		const is_reviewer = frappe.user.has_role("Technical Reviewer");
-		const is_writer = (frappe.user.has_role("Content Writer") || is_lead) && !is_reviewer;
+		const current_user = (frappe.session.user || "").toLowerCase();
+		const doc_assigned = (frm.doc.assigned_to || "").toLowerCase();
+		const doc_reviewer = (frm.doc.reviewer_technical || "").toLowerCase();
+
+		const is_doc_writer = (current_user === doc_assigned);
+		const is_doc_reviewer = (current_user === doc_reviewer);
+		const is_global_lead = frappe.user.has_role("Marketing Lead") || frappe.user.has_role("System Manager") || frappe.session.user === "Administrator";
+		const is_lead = is_global_lead && !is_doc_writer;
 
 		if (!is_lead) {
 			const metadata_fields = [
@@ -175,8 +201,8 @@ frappe.ui.form.on("Content Item", {
 			];
 			metadata_fields.forEach(field => frm.set_df_property(field, "read_only", 1));
 
-			// Due Date is editable by Content Writer (carved out from metadata protection)
-			if (is_writer) {
+			// Due Date is editable by Content Writer
+			if (is_doc_writer || (!is_doc_reviewer && !is_lead)) {
 				frm.set_df_property("due_date", "read_only", 0);
 			}
 
@@ -188,22 +214,23 @@ frappe.ui.form.on("Content Item", {
 		// Writer read-only enforcement before Briefed state
 		const is_planned = frm.doc.workflow_state === "Planned";
 
-		if (is_writer && !is_lead) {
+		if (is_doc_writer) {
+			// Effective role is Writer on this document
 			frm.set_df_property("content_file_1", "read_only", is_planned ? 1 : 0);
 			frm.set_df_property("content_file_2", "read_only", is_planned ? 1 : 0);
 			frm.set_df_property("content_file_3", "read_only", is_planned ? 1 : 0);
 			frm.set_df_property("notes", "read_only", is_planned ? 1 : 0);
 			frm.set_df_property("revision_feedback_notes", "read_only", 1);
 
-			// Strictly hide Reviewer Instructions from Content Writer
+			// Strictly hide Reviewer Instructions from Writer
 			frm.set_df_property("reviewer_copilot_instructions", "hidden", 1);
-		} else if (is_reviewer && !is_lead) {
+		} else if (is_doc_reviewer && !is_lead) {
+			// Effective role is Reviewer on this document
 			frm.set_df_property("content_file_1", "read_only", 1);
 			frm.set_df_property("content_file_2", "read_only", 1);
 			frm.set_df_property("content_file_3", "read_only", 1);
 			frm.set_df_property("notes", "read_only", 1);
 			frm.set_df_property("revision_feedback_notes", "read_only", 0);
-			// Reviewer can write copilot instructions when in review
 			frm.set_df_property("reviewer_copilot_instructions", "read_only", frm.doc.workflow_state === "In Review" ? 0 : 1);
 			frm.set_df_property("reviewer_copilot_instructions", "hidden", (frm.doc.reviewer_copilot_instructions || frm.doc.workflow_state === "In Review") ? 0 : 1);
 		} else if (is_lead) {
@@ -224,7 +251,7 @@ frappe.ui.form.on("Content Item", {
 		const writer_reviews = (frm.doc.ai_reviews || []).filter(r => r.review_type === "Writer");
 		const reviewer_reviews = (frm.doc.ai_reviews || []).filter(r => r.review_type === "Reviewer");
 
-		if (is_reviewer && !is_lead) {
+		if (is_doc_reviewer && !is_lead) {
 			// Reviewer sees ONLY Reviewer feedback & Reviewer reviews; STRICTLY HIDE Writer feedback
 			frm.set_df_property("reviewer_copilot_feedback", "hidden", (frm.doc.reviewer_copilot_feedback || reviewer_reviews.length > 0) ? 0 : 1);
 			frm.set_df_property("writer_copilot_feedback", "hidden", 1);
@@ -254,9 +281,9 @@ frappe.ui.form.on("Content Item", {
 			const grid = frm.fields_dict.ai_reviews.grid;
 			grid.grid_rows.forEach(row => {
 				if (!is_lead) {
-					if (is_reviewer && row.doc.review_type !== "Reviewer") {
+					if (is_doc_reviewer && row.doc.review_type !== "Reviewer") {
 						row.wrapper.hide();
-					} else if (!is_reviewer && row.doc.review_type !== "Writer") {
+					} else if (!is_doc_reviewer && row.doc.review_type !== "Writer") {
 						row.wrapper.hide();
 					} else {
 						row.wrapper.show();
@@ -302,5 +329,82 @@ frappe.ui.form.on("Content Item", {
 		} else {
 			frm.set_df_property(target_field, "description", "Maximum 500 characters allowed");
 		}
+	},
+
+	filter_workflow_actions(frm) {
+		const current_user = (frappe.session.user || "").toLowerCase();
+		const doc_assigned = (frm.doc.assigned_to || "").toLowerCase();
+		const doc_reviewer = (frm.doc.reviewer_technical || "").toLowerCase();
+
+		const is_doc_writer = (current_user === doc_assigned);
+		const is_doc_reviewer = (current_user === doc_reviewer);
+		const is_global_lead = frappe.user.has_role("Marketing Lead") || frappe.user.has_role("System Manager") || frappe.session.user === "Administrator";
+		const is_lead = is_global_lead && !is_doc_writer;
+
+		const applyFilter = () => {
+			if (!frm.page || !frm.page.wrapper) return;
+
+			const hideAction = (label) => {
+				const selector = [
+					`.actions-btn-group .dropdown-menu li`,
+					`.actions-btn-group .dropdown-menu .dropdown-item`,
+					`.standard-actions .dropdown-menu li`,
+					`.standard-actions .dropdown-menu .dropdown-item`,
+					`.page-actions .dropdown-menu li`,
+					`.page-actions .dropdown-menu .dropdown-item`,
+					`[data-label='${label}']`
+				].join(", ");
+
+				frm.page.wrapper.find(selector).filter(function() {
+					const t = $(this).text().trim();
+					const dl = $(this).attr("data-label") || $(this).attr("data-action");
+					return t === label || t.startsWith(label) || dl === label;
+				}).hide();
+
+				frm.page.wrapper.find(`button, a.btn`).filter(function() {
+					const t = $(this).text().trim();
+					const dl = $(this).attr("data-label") || $(this).attr("data-action");
+					return (t === label || dl === label) && !$(this).hasClass("btn-primary-action");
+				}).hide();
+			};
+
+			if (is_doc_writer) {
+				// The assigned writer must NEVER see reviewer actions or publishing actions on their own deliverable
+				hideAction(__("Request Changes"));
+				hideAction("Request Changes");
+				hideAction(__("Approve"));
+				hideAction("Approve");
+				hideAction(__("Publish"));
+				hideAction("Publish");
+			} else if (is_doc_reviewer && !is_lead) {
+				// The assigned reviewer must NEVER see writer drafting actions or publishing actions
+				hideAction(__("Start Work"));
+				hideAction("Start Work");
+				hideAction(__("Submit for Review"));
+				hideAction("Submit for Review");
+				hideAction(__("Resubmit Draft"));
+				hideAction("Resubmit Draft");
+				hideAction(__("Publish"));
+				hideAction("Publish");
+			}
+
+			// Clean up Actions menu if all workflow action items are hidden
+			const visibleItems = frm.page.wrapper.find(`.actions-btn-group .dropdown-menu .dropdown-item:visible, .actions-btn-group .dropdown-menu li:visible, .standard-actions .dropdown-menu .dropdown-item:visible`).filter(function() {
+				const txt = $(this).text().trim();
+				return txt && txt !== "Help" && !txt.startsWith("Help");
+			});
+
+			if (visibleItems.length === 0) {
+				frm.page.wrapper.find(`.actions-btn-group, .actions-btn-group .dropdown-toggle`).hide();
+			} else {
+				frm.page.wrapper.find(`.actions-btn-group, .actions-btn-group .dropdown-toggle`).show();
+			}
+		};
+
+		applyFilter();
+		setTimeout(applyFilter, 50);
+		setTimeout(applyFilter, 150);
+		setTimeout(applyFilter, 350);
+		setTimeout(applyFilter, 700);
 	}
 });

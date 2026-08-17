@@ -6,6 +6,7 @@ import urllib.request
 import urllib.error
 import frappe
 from oda_marketing.oda_marketing.ai_engine.key_manager import get_llm_config
+from oda_marketing.oda_marketing.ai_engine.logger import log_raw_llm_request, log_raw_llm_response, log_raw_llm_error
 
 
 SUBAGENT_META_PROMPT = """You are a constructive AI Copilot & Enterprise Marketing Auditor for Optimum Data Analytics (ODA).
@@ -76,8 +77,12 @@ def generate_dynamic_system_prompt(doc, reviewer_instructions=None):
 
 	# If no live API key is configured or mock/custom provider, return structured dynamic template fallback
 	if provider in ["Mock Agent", "Custom"] or not llm_cfg.get("api_key") or llm_cfg.get("api_key") == "mock-key":
-		return build_fallback_dynamic_prompt(title, content_type, topic, practice_area, reviewer_instructions=reviewer_instructions)
+		fallback = build_fallback_dynamic_prompt(title, content_type, topic, practice_area, reviewer_instructions=reviewer_instructions)
+		log_raw_llm_request("Stage 1: Prompt Generator Subagent (Local / Mock)", provider, "Local Fallback Engine", {}, {"prompt": meta_prompt}, docname=doc.name)
+		log_raw_llm_response("Stage 1: Prompt Generator Subagent (Local / Mock)", provider, 200, fallback, docname=doc.name)
+		return fallback
 
+	url = ""
 	try:
 		if provider in ["APIM Gateway", "OpenAI"]:
 			url = f"{llm_cfg['endpoint'].rstrip('/')}/chat/completions"
@@ -98,10 +103,16 @@ def generate_dynamic_system_prompt(doc, reviewer_instructions=None):
 				"temperature": 0.3
 			}
 
+			log_raw_llm_request("Stage 1: Prompt Generator Subagent", provider, url, headers, payload, docname=doc.name)
+
 			req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
 			with urllib.request.urlopen(req, timeout=30) as resp:
-				res_data = json.loads(resp.read().decode("utf-8"))
+				status_code = resp.getcode()
+				raw_bytes = resp.read()
+				raw_text = raw_bytes.decode("utf-8")
+				res_data = json.loads(raw_text)
 				generated_prompt = res_data["choices"][0]["message"]["content"].strip()
+				log_raw_llm_response("Stage 1: Prompt Generator Subagent", provider, status_code, raw_text, parsed_json=res_data, docname=doc.name)
 				return generated_prompt
 
 		elif provider == "Google Gemini":
@@ -110,10 +121,17 @@ def generate_dynamic_system_prompt(doc, reviewer_instructions=None):
 			payload = {
 				"contents": [{"parts": [{"text": meta_prompt}]}]
 			}
+
+			log_raw_llm_request("Stage 1: Prompt Generator Subagent", provider, url, headers, payload, docname=doc.name)
+
 			req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
 			with urllib.request.urlopen(req, timeout=30) as resp:
-				res_data = json.loads(resp.read().decode("utf-8"))
+				status_code = resp.getcode()
+				raw_bytes = resp.read()
+				raw_text = raw_bytes.decode("utf-8")
+				res_data = json.loads(raw_text)
 				generated_prompt = res_data["candidates"][0]["content"]["parts"][0]["text"].strip()
+				log_raw_llm_response("Stage 1: Prompt Generator Subagent", provider, status_code, raw_text, parsed_json=res_data, docname=doc.name)
 				return generated_prompt
 
 		elif provider == "Anthropic":
@@ -130,17 +148,63 @@ def generate_dynamic_system_prompt(doc, reviewer_instructions=None):
 				"max_tokens": 1024,
 				"temperature": 0.3
 			}
+
+			log_raw_llm_request("Stage 1: Prompt Generator Subagent", provider, url, headers, payload, docname=doc.name)
+
 			req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
 			with urllib.request.urlopen(req, timeout=30) as resp:
-				res_data = json.loads(resp.read().decode("utf-8"))
+				status_code = resp.getcode()
+				raw_bytes = resp.read()
+				raw_text = raw_bytes.decode("utf-8")
+				res_data = json.loads(raw_text)
 				generated_prompt = res_data["content"][0]["text"].strip()
+				log_raw_llm_response("Stage 1: Prompt Generator Subagent", provider, status_code, raw_text, parsed_json=res_data, docname=doc.name)
 				return generated_prompt
 
 	except Exception as e:
 		frappe.log_error(f"Subagent prompt generation API call failed: {str(e)}")
+		log_raw_llm_error("Stage 1: Prompt Generator Subagent", provider, url, e, docname=doc.name)
 
 	# Fallback to local prompt builder
-	return build_fallback_dynamic_prompt(title, content_type, topic, practice_area, reviewer_instructions=reviewer_instructions)
+	fallback = build_fallback_dynamic_prompt(title, content_type, topic, practice_area, reviewer_instructions=reviewer_instructions)
+	log_raw_llm_response("Stage 1: Prompt Generator Subagent (Fallback Prompt)", provider, 200, fallback, docname=doc.name)
+	return fallback
+
+
+
+def log_terminal_ai_stage(stage_title, provider, url, payload, response, docname=None):
+	"""Prints formatted AI request payload and response directly to the terminal stdout."""
+	border = "=" * 80
+	print(f"\n{border}", flush=True)
+	print(f"🤖 [AI COPILOT] {stage_title.upper()} | Doc: {docname or 'N/A'} | Provider: {provider}", flush=True)
+	print(f"🌐 Endpoint: {url}", flush=True)
+	print(f"{'-' * 80}", flush=True)
+	print("📤 [REQUEST PAYLOAD / INPUT PROMPT]:", flush=True)
+	try:
+		if isinstance(payload, (dict, list)):
+			print(json.dumps(payload, indent=2, ensure_ascii=False), flush=True)
+		else:
+			print(str(payload).strip(), flush=True)
+	except Exception:
+		print(str(payload).strip(), flush=True)
+
+	print(f"{'-' * 80}", flush=True)
+	print("📥 [RESPONSE / GENERATED OUTPUT]:", flush=True)
+	try:
+		if isinstance(response, (dict, list)):
+			print(json.dumps(response, indent=2, ensure_ascii=False), flush=True)
+		elif isinstance(response, str):
+			try:
+				parsed = json.loads(response)
+				print(json.dumps(parsed, indent=2, ensure_ascii=False), flush=True)
+			except Exception:
+				print(str(response).strip(), flush=True)
+		else:
+			print(str(response).strip(), flush=True)
+	except Exception:
+		print(str(response).strip(), flush=True)
+	print(f"{border}\n", flush=True)
+
 
 
 def build_fallback_dynamic_prompt(title, content_type, topic, practice_area, reviewer_instructions=None):

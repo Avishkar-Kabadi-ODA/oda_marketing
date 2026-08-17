@@ -11,8 +11,8 @@ def has_app_permission(user=None):
 	if user == "Administrator":
 		return True
 	roles = frappe.get_roles(user)
-	allowed = {"System Manager", "Marketing Lead", "Content Writer", "Technical Reviewer"}
-	return bool(allowed & set(roles))
+	allowed = {"System Manager", "Marketing Lead", "Technical Reviewer", "Content Writer", "Desk User", "Employee", "All"}
+	return bool(allowed & set(roles)) or frappe.session.user == user
 
 
 def get_default_publisher():
@@ -22,31 +22,50 @@ def get_default_publisher():
 		return None
 
 
-def get_content_item_permission_query_conditions(user):
+def safe_escape(val):
+	try:
+		if getattr(frappe, "db", None) and hasattr(frappe.db, "escape"):
+			return frappe.db.escape(val)
+	except Exception:
+		pass
+	clean = str(val or "").replace("'", "''")
+	return f"'{clean}'"
+
+
+def get_content_item_permission_query_conditions(user=None):
 	if not user:
-		user = frappe.session.user
+		user = getattr(getattr(frappe, "session", None), "user", None) or "Administrator"
 
 	user_lower = (user or "").lower()
 	publisher = get_default_publisher()
 	publisher_lower = (publisher or "").lower()
 
-	roles = frappe.get_roles(user)
+	try:
+		roles = frappe.get_roles(user)
+	except Exception:
+		roles = []
+
 	if user == "Administrator" or "System Manager" in roles or "Marketing Lead" in roles or user_lower == publisher_lower:
 		return ""
 
-	user_esc = frappe.db.escape(user_lower)
-	return f"(LOWER(`tabContent Item`.assigned_to) = {user_esc} OR LOWER(`tabContent Item`.reviewer_technical) = {user_esc} OR LOWER(`tabContent Item`.owner) = {user_esc})"
+	user_esc = safe_escape(user_lower)
+	# Non-leads can ONLY see items assigned to them or where they are the reviewer, AND only once moved out of 'Planned' state
+	return f"((LOWER(`tabContent Item`.assigned_to) = {user_esc} AND IFNULL(`tabContent Item`.workflow_state, 'Planned') != 'Planned') OR (LOWER(`tabContent Item`.reviewer_technical) = {user_esc} AND IFNULL(`tabContent Item`.workflow_state, 'Planned') != 'Planned'))"
 
 
 def has_content_item_permission(doc, ptype="read", user=None):
 	if not user:
-		user = frappe.session.user
+		user = getattr(getattr(frappe, "session", None), "user", None) or "Administrator"
 
 	user_lower = (user or "").lower()
 	publisher = get_default_publisher()
 	publisher_lower = (publisher or "").lower()
 
-	roles = frappe.get_roles(user)
+	try:
+		roles = frappe.get_roles(user)
+	except Exception:
+		roles = []
+
 	is_lead = user == "Administrator" or "System Manager" in roles or "Marketing Lead" in roles or user_lower == publisher_lower
 
 	if is_lead:
@@ -56,30 +75,22 @@ def has_content_item_permission(doc, ptype="read", user=None):
 	if ptype in ["delete", "create"]:
 		return False
 
-	assigned = (doc.assigned_to or "").lower()
-	tech_rev = (doc.reviewer_technical or "").lower()
-	owner = (doc.owner or "").lower()
+	# Non-leads cannot view or edit items while in Planned state
+	state = getattr(doc, "workflow_state", None) or getattr(doc, "status", None) or "Planned"
+	if state == "Planned":
+		return False
 
-	if user_lower in [assigned, tech_rev, owner]:
+	assigned = (getattr(doc, "assigned_to", None) or "").lower()
+	tech_rev = (getattr(doc, "reviewer_technical", None) or "").lower()
+
+	if user_lower in [assigned, tech_rev]:
 		return True
 
 	return False
 
 
 def validate_user_marketing_roles(doc, method=None):
-	"""
-	Enforces mutual exclusivity among marketing roles:
-	A user cannot hold more than ONE of: Marketing Lead, Content Writer, Technical Reviewer.
-	"""
-	marketing_roles = {"Marketing Lead", "Content Writer", "Technical Reviewer"}
-	assigned_marketing_roles = [
-		r.role for r in (doc.roles or [])
-		if r.role in marketing_roles
-	]
+	"""No-op: Users can hold Marketing Lead, Technical Reviewer, or multiple roles simultaneously."""
+	pass
 
-	if len(assigned_marketing_roles) > 1:
-		roles_list_str = ", ".join(f"<b>{r}</b>" for r in sorted(assigned_marketing_roles))
-		frappe.throw(
-			_("A user cannot hold multiple marketing roles simultaneously ({0}). A user can be assigned only ONE role among: <b>Marketing Lead</b>, <b>Content Writer</b>, or <b>Technical Reviewer</b>.").format(roles_list_str),
-			frappe.ValidationError
-		)
+

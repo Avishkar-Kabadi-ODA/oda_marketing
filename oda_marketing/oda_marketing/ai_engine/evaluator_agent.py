@@ -7,6 +7,7 @@ import urllib.error
 import frappe
 from oda_marketing.oda_marketing.ai_engine.key_manager import get_llm_config
 from oda_marketing.oda_marketing.ai_engine.file_extractor import get_combined_draft_text
+from oda_marketing.oda_marketing.ai_engine.logger import log_raw_llm_request, log_raw_llm_response, log_raw_llm_error
 
 
 def evaluate_content_item(doc, dynamic_system_prompt, user_email=None, reviewer_instructions=None):
@@ -53,8 +54,12 @@ Evaluate this deliverable according to your System Prompt criteria and output va
 
 	# If mock agent or no key, perform heuristic quality evaluation
 	if provider in ["Mock Agent", "Custom"] or not llm_cfg.get("api_key") or llm_cfg.get("api_key") == "mock-key":
-		return run_heuristic_mock_evaluation(doc, draft_text)
+		res = run_heuristic_mock_evaluation(doc, draft_text)
+		log_raw_llm_request("Stage 2: Primary Evaluator Agent (Local Heuristic / Mock)", provider, "Local Evaluator", {}, {"system_prompt": dynamic_system_prompt, "user_prompt": user_prompt}, docname=docname)
+		log_raw_llm_response("Stage 2: Primary Evaluator Agent (Local Heuristic / Mock)", provider, 200, res, parsed_json=res, docname=docname)
+		return res
 
+	url = ""
 	try:
 		if provider in ["APIM Gateway", "OpenAI"]:
 			url = f"{llm_cfg['endpoint'].rstrip('/')}/chat/completions"
@@ -77,13 +82,18 @@ Evaluate this deliverable according to your System Prompt criteria and output va
 			}
 
 			publish_stream_event(docname, user_email, "Analyzing technical accuracy, structure & domain depth...", progress=65)
+			log_raw_llm_request("Stage 2: Primary Evaluator Agent", provider, url, headers, payload, docname=docname)
 
 			req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
 			with urllib.request.urlopen(req, timeout=60) as resp:
-				res_data = json.loads(resp.read().decode("utf-8"))
+				status_code = resp.getcode()
+				raw_bytes = resp.read()
+				raw_text = raw_bytes.decode("utf-8")
+				res_data = json.loads(raw_text)
 				raw_content = res_data["choices"][0]["message"]["content"]
 				res_json = json.loads(raw_content)
 
+				log_raw_llm_response("Stage 2: Primary Evaluator Agent", provider, status_code, raw_text, parsed_json=res_json, docname=docname)
 				publish_stream_event(docname, user_email, f"Evaluation complete. Score: {res_json.get('overall_score', 0)}%", progress=90)
 				return format_eval_result(res_json)
 
@@ -97,13 +107,18 @@ Evaluate this deliverable according to your System Prompt criteria and output va
 			}
 
 			publish_stream_event(docname, user_email, "Analyzing technical accuracy & domain depth via Gemini...", progress=65)
+			log_raw_llm_request("Stage 2: Primary Evaluator Agent", provider, url, headers, payload, docname=docname)
 
 			req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
 			with urllib.request.urlopen(req, timeout=60) as resp:
-				res_data = json.loads(resp.read().decode("utf-8"))
+				status_code = resp.getcode()
+				raw_bytes = resp.read()
+				raw_text = raw_bytes.decode("utf-8")
+				res_data = json.loads(raw_text)
 				raw_content = res_data["candidates"][0]["content"]["parts"][0]["text"]
 				res_json = json.loads(raw_content)
 
+				log_raw_llm_response("Stage 2: Primary Evaluator Agent", provider, status_code, raw_text, parsed_json=res_json, docname=docname)
 				publish_stream_event(docname, user_email, f"Evaluation complete. Score: {res_json.get('overall_score', 0)}%", progress=90)
 				return format_eval_result(res_json)
 
@@ -123,22 +138,66 @@ Evaluate this deliverable according to your System Prompt criteria and output va
 			}
 
 			publish_stream_event(docname, user_email, "Analyzing technical accuracy & domain depth via Anthropic...", progress=65)
+			log_raw_llm_request("Stage 2: Primary Evaluator Agent", provider, url, headers, payload, docname=docname)
 
 			req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
 			with urllib.request.urlopen(req, timeout=60) as resp:
-				res_data = json.loads(resp.read().decode("utf-8"))
+				status_code = resp.getcode()
+				raw_bytes = resp.read()
+				raw_text = raw_bytes.decode("utf-8")
+				res_data = json.loads(raw_text)
 				raw_content = res_data["content"][0]["text"]
 				res_json = json.loads(raw_content)
 
+				log_raw_llm_response("Stage 2: Primary Evaluator Agent", provider, status_code, raw_text, parsed_json=res_json, docname=docname)
 				publish_stream_event(docname, user_email, f"Evaluation complete. Score: {res_json.get('overall_score', 0)}%", progress=90)
 				return format_eval_result(res_json)
 
 	except Exception as e:
 		frappe.log_error(f"Primary Agent LLM Evaluation Error: {str(e)}")
+		log_raw_llm_error("Stage 2: Primary Evaluator Agent", provider, url, e, docname=docname)
 
 	# Fallback heuristic evaluation if API fails
 	publish_stream_event(docname, user_email, "API connection issue. Running local heuristic evaluator...", progress=80)
-	return run_heuristic_mock_evaluation(doc, draft_text)
+	res = run_heuristic_mock_evaluation(doc, draft_text)
+	log_raw_llm_response("Stage 2: Primary Evaluator Agent (Fallback Heuristic)", provider, 200, res, parsed_json=res, docname=docname)
+	return res
+
+
+
+def log_terminal_evaluation(stage_title, provider, url, payload, response_json, docname=None):
+	"""Prints formatted AI evaluation payload and response directly to the terminal stdout."""
+	border = "=" * 80
+	print(f"\n{border}", flush=True)
+	print(f"🎯 [AI COPILOT] {stage_title.upper()} | Deliverable: {docname or 'N/A'} | Provider: {provider}", flush=True)
+	print(f"🌐 Endpoint: {url}", flush=True)
+	print(f"{'-' * 80}", flush=True)
+	print("📤 [EVALUATION REQUEST PAYLOAD / PROMPT]:", flush=True)
+	try:
+		if isinstance(payload, (dict, list)):
+			print(json.dumps(payload, indent=2, ensure_ascii=False), flush=True)
+		else:
+			print(str(payload).strip(), flush=True)
+	except Exception:
+		print(str(payload).strip(), flush=True)
+
+	print(f"{'-' * 80}", flush=True)
+	print("📥 [EVALUATION SCORE & JSON RESPONSE]:", flush=True)
+	try:
+		if isinstance(response_json, (dict, list)):
+			print(json.dumps(response_json, indent=2, ensure_ascii=False), flush=True)
+		elif isinstance(response_json, str):
+			try:
+				parsed = json.loads(response_json)
+				print(json.dumps(parsed, indent=2, ensure_ascii=False), flush=True)
+			except Exception:
+				print(str(response_json).strip(), flush=True)
+		else:
+			print(str(response_json).strip(), flush=True)
+	except Exception:
+		print(str(response_json).strip(), flush=True)
+	print(f"{border}\n", flush=True)
+
 
 
 def publish_stream_event(docname, user_email, message, progress=0):

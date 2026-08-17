@@ -275,10 +275,10 @@ def setup_workflow():
 
 	states = [
 		{"state": "Planned", "doc_status": "0", "allow_edit": "Marketing Lead", "style": "Primary"},
-		{"state": "Briefed", "doc_status": "0", "allow_edit": "Marketing Lead", "style": "Info"},
-		{"state": "In Progress", "doc_status": "0", "allow_edit": "Content Writer", "style": "Warning"},
-		{"state": "In Review", "doc_status": "0", "allow_edit": "Technical Reviewer", "style": "Warning"},
-		{"state": "In Revision", "doc_status": "0", "allow_edit": "Content Writer", "style": "Danger"},
+		{"state": "Briefed", "doc_status": "0", "allow_edit": "All", "style": "Info"},
+		{"state": "In Progress", "doc_status": "0", "allow_edit": "All", "style": "Warning"},
+		{"state": "In Review", "doc_status": "0", "allow_edit": "All", "style": "Warning"},
+		{"state": "In Revision", "doc_status": "0", "allow_edit": "All", "style": "Danger"},
 		{"state": "Approved", "doc_status": "0", "allow_edit": "Marketing Lead", "style": "Success"},
 		{"state": "Published", "doc_status": "0", "allow_edit": "Marketing Lead", "style": "Success"},
 	]
@@ -289,12 +289,14 @@ def setup_workflow():
 		{"state": "Planned", "action": "Issue Brief", "next_state": "Briefed", "allowed": "System Manager"},
 
 		# Briefed -> In Progress (writer starts work, stamps brief_accepted_on)
-		{"state": "Briefed", "action": "Start Work", "next_state": "In Progress", "allowed": "Content Writer"},
+		{"state": "Briefed", "action": "Start Work", "next_state": "In Progress", "allowed": "All"},
+		{"state": "Briefed", "action": "Start Work", "next_state": "In Progress", "allowed": "Technical Reviewer"},
 		{"state": "Briefed", "action": "Start Work", "next_state": "In Progress", "allowed": "Marketing Lead"},
 		{"state": "Briefed", "action": "Start Work", "next_state": "In Progress", "allowed": "System Manager"},
 
 		# In Progress -> In Review (direct human review)
-		{"state": "In Progress", "action": "Submit for Review", "next_state": "In Review", "allowed": "Content Writer"},
+		{"state": "In Progress", "action": "Submit for Review", "next_state": "In Review", "allowed": "All"},
+		{"state": "In Progress", "action": "Submit for Review", "next_state": "In Review", "allowed": "Technical Reviewer"},
 		{"state": "In Progress", "action": "Submit for Review", "next_state": "In Review", "allowed": "Marketing Lead"},
 		{"state": "In Progress", "action": "Submit for Review", "next_state": "In Review", "allowed": "System Manager"},
 
@@ -309,7 +311,8 @@ def setup_workflow():
 		{"state": "In Review", "action": "Approve", "next_state": "Approved", "allowed": "System Manager"},
 
 		# In Revision -> In Progress (writer resubmits, gets choice again)
-		{"state": "In Revision", "action": "Resubmit Draft", "next_state": "In Progress", "allowed": "Content Writer"},
+		{"state": "In Revision", "action": "Resubmit Draft", "next_state": "In Progress", "allowed": "All"},
+		{"state": "In Revision", "action": "Resubmit Draft", "next_state": "In Progress", "allowed": "Technical Reviewer"},
 		{"state": "In Revision", "action": "Resubmit Draft", "next_state": "In Progress", "allowed": "Marketing Lead"},
 		{"state": "In Revision", "action": "Resubmit Draft", "next_state": "In Progress", "allowed": "System Manager"},
 
@@ -375,10 +378,18 @@ def setup_workspace_sidebar():
 		},
 		{
 			"type": "Link",
+			"link_type": "Page",
+			"link_to": "marketing-dashboard",
+			"label": "Marketing Dashboard",
+			"icon": "dashboard",
+			"child": 0,
+		},
+		{
+			"type": "Link",
 			"link_type": "DocType",
 			"link_to": "Content Item",
-			"label": "Content Item",
-			"icon": "calendar",
+			"label": "Content Items",
+			"icon": "clipboard-pen-line",
 			"child": 0,
 		},
 		{

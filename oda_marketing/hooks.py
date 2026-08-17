@@ -43,11 +43,8 @@ after_install = "oda_marketing.setup_fixtures.run_setup"
 after_migrate = "oda_marketing.setup_fixtures.run_setup"
 
 # Document Events Hooks
-doc_events = {
-	"User": {
-		"validate": "oda_marketing.permissions.validate_user_marketing_roles"
-	}
-}
+doc_events = {}
 
 # Home Pages
 home_page = "login"
+

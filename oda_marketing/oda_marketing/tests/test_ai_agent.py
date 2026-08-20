@@ -8,6 +8,7 @@ from oda_marketing.oda_marketing.ai_engine.file_extractor import extract_file_co
 from oda_marketing.oda_marketing.ai_engine.prompt_subagent import generate_dynamic_system_prompt
 from oda_marketing.oda_marketing.ai_engine.evaluator_agent import evaluate_content_item
 from oda_marketing.oda_marketing.ai_engine.runner import run_ai_review
+from oda_marketing.tests.test_demo_script import create_unit_test_users
 
 
 def _create_test_item(overrides=None):
@@ -47,6 +48,7 @@ def _set_workflow_state(doc, state):
 class TestAIAgentEngine(unittest.TestCase):
 	def setUp(self):
 		frappe.db.commit()
+		create_unit_test_users()
 		cal_name = "2026 Global Marketing Operations Calendar"
 		if not frappe.db.exists("Content Calendar", cal_name):
 			frappe.get_doc({

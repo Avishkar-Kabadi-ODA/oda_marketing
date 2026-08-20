@@ -5,12 +5,14 @@ import frappe
 from frappe.model.workflow import apply_workflow
 from frappe.tests.utils import FrappeTestCase
 from oda_marketing.setup_fixtures import run_setup
+from oda_marketing.tests.test_demo_script import create_unit_test_users
 
 
 class TestContentCalendar(FrappeTestCase):
 	def setUp(self):
 		frappe.set_user("Administrator")
 		run_setup()
+		create_unit_test_users()
 
 	def test_calendar_creation_and_item_linkage(self):
 		cal_name = "2026 Q4 Operations Calendar"
@@ -33,11 +35,11 @@ class TestContentCalendar(FrappeTestCase):
 			"doctype": "Content Item",
 			"title": "Q4 Strategy Blog",
 			"content_type": "Blog",
-			"topic": "Q4 Cloud Strategy Briefing",
-			"practice_area": "Cross-domain",
+			"description": "Q4 Cloud Strategy Briefing",
+			"industry_domain": "Cross-domain",
 			"content_calendar": calendar.name,
 			"planned_publish_date": "2026-10-15",
-			"sla_due_date": "2026-10-20",
+			"due_date": "2026-10-20",
 			"assigned_to": "writer.test@oda.local",
 			"reviewer_technical": "Avishkar.Kabadi@optimumdataanalytics.com"
 		})
@@ -60,11 +62,11 @@ class TestContentCalendar(FrappeTestCase):
 			"doctype": "Content Item",
 			"title": "Workflow Test Item",
 			"content_type": "Blog",
-			"topic": "Workflow test topic",
-			"practice_area": "Fintech",
+			"description": "Workflow test topic",
+			"industry_domain": "Fintech",
 			"content_calendar": cal_name,
 			"planned_publish_date": "2026-11-01",
-			"sla_due_date": "2026-11-05",
+			"due_date": "2026-11-05",
 			"assigned_to": "writer.test@oda.local",
 			"reviewer_technical": "Avishkar.Kabadi@optimumdataanalytics.com",
 			"workflow_state": "Planned",

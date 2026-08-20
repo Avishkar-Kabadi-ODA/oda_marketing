@@ -12,30 +12,31 @@ from oda_marketing.setup_fixtures import setup_roles, run_setup
 def create_unit_test_users():
 	test_users = [
 		{"email": "lead.test@oda.local", "first_name": "Marketing", "last_name": "Lead Test", "role": "Marketing Lead"},
-		{"email": "writer.test@oda.local", "first_name": "Content", "last_name": "Writer Test", "role": "Content Writer"},
-		{"email": "Avishkar.Kabadi@optimumdataanalytics.com", "first_name": "Avishkar", "last_name": "Kabadi", "role": "Technical Reviewer"},
+		{"email": "writer.test@oda.local", "first_name": "Content", "last_name": "Writer Test", "role": "Desk User"},
+		{"email": "Avishkar.Kabadi@optimumdataanalytics.com", "first_name": "Avishkar", "last_name": "Kabadi", "role": "Desk User"},
 		{"email": "Mrudula.Saradar@optimumdataanalytics.com", "first_name": "Mrudula", "last_name": "Saradar", "role": "Marketing Lead"},
 	]
 	for u in test_users:
 		if not frappe.db.exists("User", u["email"]):
-			user = frappe.get_doc({
+			user_dict = {
 				"doctype": "User",
 				"email": u["email"],
 				"first_name": u["first_name"],
 				"last_name": u["last_name"],
 				"enabled": 1,
 				"send_welcome_email": 0,
-				"user_type": "System User",
-				"roles": [
-					{"role": u["role"]}
-				]
-			})
+				"user_type": "System User"
+			}
+			if u.get("role"):
+				user_dict["roles"] = [{"role": u["role"]}]
+			user = frappe.get_doc(user_dict)
 			user.insert(ignore_permissions=True)
 			from frappe.utils.password import update_password
 			update_password(u["email"], "Password123!")
 		else:
 			user = frappe.get_doc("User", u["email"])
-			user.add_roles(u["role"])
+			if u.get("role"):
+				user.add_roles(u["role"])
 
 
 class TestMarketingOperationsFlow(unittest.TestCase):
@@ -63,10 +64,10 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 			"doctype": "Content Item",
 			"title": "Unauthorized Item",
 			"content_type": "Blog",
-			"topic": "Unauthorized creation",
+			"description": "Unauthorized creation",
 			"content_calendar": cal.name,
 			"planned_publish_date": "2026-09-01",
-			"sla_due_date": "2026-08-25",
+			"due_date": "2026-08-25",
 			"assigned_to": "writer.test@oda.local",
 			"reviewer_technical": "Avishkar.Kabadi@optimumdataanalytics.com"
 		})
@@ -78,10 +79,10 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 			"doctype": "Content Item",
 			"title": "Authorized Item",
 			"content_type": "Blog",
-			"topic": "Authorized creation",
+			"description": "Authorized creation",
 			"content_calendar": cal.name,
 			"planned_publish_date": "2026-09-01",
-			"sla_due_date": "2026-08-25",
+			"due_date": "2026-08-25",
 			"assigned_to": "writer.test@oda.local",
 			"reviewer_technical": "Avishkar.Kabadi@optimumdataanalytics.com"
 		})
@@ -94,9 +95,9 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 		item.title = "Modified Title By Writer"
 		self.assertRaises(frappe.PermissionError, item.save)
 
-		# Writer attempts to modify SLA due date -> SUCCEEDS (Due Date is now editable by writer)
+		# Writer attempts to modify due date -> SUCCEEDS (Due Date is now editable by writer)
 		item.reload()
-		item.sla_due_date = "2026-10-10"
+		item.due_date = "2026-10-10"
 		# Note: Writer cannot edit attachments in Planned state, but Due Date is carved out.
 		# However, item is in "Planned" state, so writer can't save at all because
 		# Frappe workflow only allows "Marketing Lead" to edit in Planned state.
@@ -115,9 +116,9 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 
 		# Writer can now edit Due Date in "In Progress" state
 		item.reload()
-		item.sla_due_date = "2026-10-10"
+		item.due_date = "2026-10-10"
 		item.save()
-		self.assertEqual(str(item.sla_due_date), "2026-10-10")
+		self.assertEqual(str(item.due_date), "2026-10-10")
 		frappe.db.commit()
 
 		# Writer updates content_file_1, content_file_2, content_file_3 in In Progress -> succeeds
@@ -145,17 +146,17 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 			"doctype": "Content Item",
 			"title": "SLA Manual Date Item",
 			"content_type": "Blog",
-			"topic": "SLA test",
+			"description": "SLA test",
 			"content_calendar": cal.name,
 			"planned_publish_date": "2026-09-01",
 			"assigned_to": "writer.test@oda.local",
 			"reviewer_technical": "Avishkar.Kabadi@optimumdataanalytics.com",
-			"sla_due_date": "2026-08-20"
+			"due_date": "2026-08-20"
 		})
 		item.insert()
 
-		# Verify SLA Due Date is the manually set value (no auto-calculation)
-		self.assertEqual(str(item.sla_due_date), "2026-08-20")
+		# Verify Due Date is the manually set value (no auto-calculation)
+		self.assertEqual(str(item.due_date), "2026-08-20")
 
 		# Test mandatory Published URL validation
 		item.workflow_state = "Published"
@@ -191,10 +192,11 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 			"doctype": "Content Item",
 			"title": "GenAI in Oncology",
 			"content_type": "Blog",
-			"topic": "Clinical AI decision support",
-			"practice_area": "HCLS",
+			"description": "Clinical AI decision support",
+			"industry_domain": "HCLS",
 			"content_calendar": cal.name,
 			"planned_publish_date": "2026-09-01",
+			"due_date": "2026-08-25",
 			"assigned_to": "writer.test@oda.local",
 			"reviewer_technical": tech_rev
 		})
@@ -202,8 +204,9 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 		frappe.db.commit()
 
 		item.reload()
-		self.assertTrue(has_content_item_permission(item, user="writer.test@oda.local"))
-		self.assertTrue(has_content_item_permission(item, user=tech_rev))
+		# In Planned state, only Leads can view; non-leads cannot view until Briefed
+		self.assertFalse(has_content_item_permission(item, user="writer.test@oda.local"))
+		self.assertFalse(has_content_item_permission(item, user=tech_rev))
 		self.assertTrue(has_content_item_permission(item, user="Mrudula.Saradar@optimumdataanalytics.com"))
 
 		# Issue Brief
@@ -212,6 +215,10 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 		apply_workflow(item, "Issue Brief")
 		item.reload()
 		self.assertEqual(item.workflow_state, "Briefed")
+
+		# Once Briefed, Writer and Reviewer can view
+		self.assertTrue(has_content_item_permission(item, user="writer.test@oda.local"))
+		self.assertTrue(has_content_item_permission(item, user=tech_rev))
 
 		# Start Work (renamed from "Accept Brief")
 		frappe.set_user("writer.test@oda.local")
@@ -296,10 +303,11 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 			"doctype": "Content Item",
 			"title": "AI Copilot Resubmit Item",
 			"content_type": "Blog",
-			"topic": "Testing AI re-evaluation from In Revision",
-			"practice_area": "HCLS",
+			"description": "Testing AI re-evaluation from In Revision",
+			"industry_domain": "HCLS",
 			"content_calendar": cal.name,
 			"planned_publish_date": "2026-09-01",
+			"due_date": "2026-08-25",
 			"assigned_to": "writer.test@oda.local",
 			"reviewer_technical": tech_rev,
 			"content_file_1": "/files/sample_draft.txt"

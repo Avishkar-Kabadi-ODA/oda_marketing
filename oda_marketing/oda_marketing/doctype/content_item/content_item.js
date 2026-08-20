@@ -387,18 +387,6 @@ frappe.ui.form.on("Content Item", {
 				hideAction(__("Publish"));
 				hideAction("Publish");
 			}
-
-			// Clean up Actions menu if all workflow action items are hidden
-			const visibleItems = frm.page.wrapper.find(`.actions-btn-group .dropdown-menu .dropdown-item:visible, .actions-btn-group .dropdown-menu li:visible, .standard-actions .dropdown-menu .dropdown-item:visible`).filter(function() {
-				const txt = $(this).text().trim();
-				return txt && txt !== "Help" && !txt.startsWith("Help");
-			});
-
-			if (visibleItems.length === 0) {
-				frm.page.wrapper.find(`.actions-btn-group, .actions-btn-group .dropdown-toggle`).hide();
-			} else {
-				frm.page.wrapper.find(`.actions-btn-group, .actions-btn-group .dropdown-toggle`).show();
-			}
 		};
 
 		applyFilter();

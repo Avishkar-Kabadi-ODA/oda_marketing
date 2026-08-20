@@ -19,6 +19,12 @@ def setup_roles():
 			role_doc.insert(ignore_permissions=True)
 			print(f"Created Role: {r['role_name']}")
 
+	# Remove any stale Custom DocPerms so the standard DocPerms from doctype JSON definitions take effect
+	frappe.db.delete("Custom DocPerm", {"parent": ["in", ["Content Item", "Content Calendar", "Content Item Option"]]})
+	frappe.clear_cache(doctype="Content Item")
+	frappe.clear_cache(doctype="Content Calendar")
+	frappe.clear_cache(doctype="Content Item Option")
+
 
 def setup_content_item_options():
 	"""Create default Content Item Option records for Format and Industry Domain."""
@@ -273,10 +279,10 @@ def setup_workflow():
 
 	states = [
 		{"state": "Planned", "doc_status": "0", "allow_edit": "Marketing Lead", "style": "Primary"},
-		{"state": "Briefed", "doc_status": "0", "allow_edit": "All", "style": "Info"},
-		{"state": "In Progress", "doc_status": "0", "allow_edit": "All", "style": "Warning"},
-		{"state": "In Review", "doc_status": "0", "allow_edit": "All", "style": "Warning"},
-		{"state": "In Revision", "doc_status": "0", "allow_edit": "All", "style": "Danger"},
+		{"state": "Briefed", "doc_status": "0", "allow_edit": "Desk User", "style": "Info"},
+		{"state": "In Progress", "doc_status": "0", "allow_edit": "Desk User", "style": "Warning"},
+		{"state": "In Review", "doc_status": "0", "allow_edit": "Desk User", "style": "Warning"},
+		{"state": "In Revision", "doc_status": "0", "allow_edit": "Desk User", "style": "Danger"},
 		{"state": "Approved", "doc_status": "0", "allow_edit": "Marketing Lead", "style": "Success"},
 		{"state": "Published", "doc_status": "0", "allow_edit": "Marketing Lead", "style": "Success"},
 	]
@@ -287,19 +293,24 @@ def setup_workflow():
 		{"state": "Planned", "action": "Issue Brief", "next_state": "Briefed", "allowed": "System Manager"},
 
 		# Briefed -> In Progress (writer starts work, stamps brief_accepted_on)
-		{"state": "Briefed", "action": "Start Work", "next_state": "In Progress", "allowed": "All"},
+		{"state": "Briefed", "action": "Start Work", "next_state": "In Progress", "allowed": "Desk User"},
+		{"state": "Briefed", "action": "Start Work", "next_state": "In Progress", "allowed": "Marketing Lead"},
 
 		# In Progress -> In Review (writer submits draft)
-		{"state": "In Progress", "action": "Submit for Review", "next_state": "In Review", "allowed": "All"},
+		{"state": "In Progress", "action": "Submit for Review", "next_state": "In Review", "allowed": "Desk User"},
+		{"state": "In Progress", "action": "Submit for Review", "next_state": "In Review", "allowed": "Marketing Lead"},
 
 		# In Review -> In Revision (reviewer requests changes)
-		{"state": "In Review", "action": "Request Changes", "next_state": "In Revision", "allowed": "All"},
+		{"state": "In Review", "action": "Request Changes", "next_state": "In Revision", "allowed": "Desk User"},
+		{"state": "In Review", "action": "Request Changes", "next_state": "In Revision", "allowed": "Marketing Lead"},
 
 		# In Review -> Approved (reviewer approves)
-		{"state": "In Review", "action": "Approve", "next_state": "Approved", "allowed": "All"},
+		{"state": "In Review", "action": "Approve", "next_state": "Approved", "allowed": "Desk User"},
+		{"state": "In Review", "action": "Approve", "next_state": "Approved", "allowed": "Marketing Lead"},
 
 		# In Revision -> In Progress (writer resubmits draft)
-		{"state": "In Revision", "action": "Resubmit Draft", "next_state": "In Progress", "allowed": "All"},
+		{"state": "In Revision", "action": "Resubmit Draft", "next_state": "In Progress", "allowed": "Desk User"},
+		{"state": "In Revision", "action": "Resubmit Draft", "next_state": "In Progress", "allowed": "Marketing Lead"},
 
 		# Approved -> Published (Lead/Publisher only)
 		{"state": "Approved", "action": "Publish", "next_state": "Published", "allowed": "Marketing Lead"},
@@ -453,7 +464,16 @@ def setup_workspace_sidebar():
 		"parenttype": "DocType",
 		"parentfield": "permissions",
 		"role": "Desk User",
-		"read": 0, "write": 0, "create": 0, "delete": 0
+		"read": 1, "write": 0, "create": 0, "delete": 0
+	}).insert(ignore_permissions=True)
+
+	frappe.get_doc({
+		"doctype": "Custom DocPerm",
+		"parent": "Workspace Sidebar",
+		"parenttype": "DocType",
+		"parentfield": "permissions",
+		"role": "All",
+		"read": 1, "write": 0, "create": 0, "delete": 0
 	}).insert(ignore_permissions=True)
 
 	frappe.clear_cache(doctype="Workspace Sidebar")

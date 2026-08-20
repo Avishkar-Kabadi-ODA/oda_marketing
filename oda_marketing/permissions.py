@@ -75,6 +75,10 @@ def has_content_item_permission(doc, ptype="read", user=None):
 	if ptype in ["delete", "create"]:
 		return False
 
+	# If doc is None or a string (DocType-level permission check), allow baseline read/write for Desk Users
+	if not doc or isinstance(doc, str):
+		return True
+
 	# Non-leads cannot view or edit items while in Planned state
 	state = getattr(doc, "workflow_state", None) or getattr(doc, "status", None) or "Planned"
 	if state == "Planned":

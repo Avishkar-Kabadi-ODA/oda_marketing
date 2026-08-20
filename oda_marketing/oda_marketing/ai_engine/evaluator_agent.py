@@ -65,10 +65,8 @@ Evaluate this deliverable according to your System Prompt criteria and output va
 			url = f"{llm_cfg['endpoint'].rstrip('/')}/chat/completions"
 			headers = {
 				"Content-Type": "application/json",
+				"Authorization": f"Bearer {llm_cfg['api_key']}",
 				"api-key": llm_cfg["api_key"]
-			} if provider == "APIM Gateway" else {
-				"Content-Type": "application/json",
-				"Authorization": f"Bearer {llm_cfg['api_key']}"
 			}
 
 			payload = {

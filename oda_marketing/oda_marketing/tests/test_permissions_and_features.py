@@ -50,7 +50,7 @@ class TestPermissionsAndFeatures(FrappeTestCase):
 			}).insert(ignore_permissions=True)
 
 		# Create test users
-		for email, role in [("test_writer_1@example.com", None), ("test_reviewer_1@example.com", None), ("test_lead_1@example.com", "Marketing Lead"), ("test_lead_2@example.com", "Marketing Lead")]:
+		for email, role in [("test_writer_1@example.com", "Desk User"), ("test_reviewer_1@example.com", "Desk User"), ("test_lead_1@example.com", "Marketing Lead"), ("test_lead_2@example.com", "Marketing Lead")]:
 			if not frappe.db.exists("User", email):
 				user_dict = {
 					"doctype": "User",
@@ -325,6 +325,7 @@ class TestPermissionsAndFeatures(FrappeTestCase):
 		self.assertRaises(frappe.PermissionError, item.save)
 
 		# Start Work moves to In Progress
+		item.reload()
 		apply_workflow(item, "Start Work")
 
 		# Now in In Progress state, writer can edit notes/attachments

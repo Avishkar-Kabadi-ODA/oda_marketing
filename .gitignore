@@ -58,3 +58,7 @@ public/files/sample_draft.*
 
 # Aider AI Chat
 .aider*
+
+# Agent Memory & Workspace Rules
+memory/
+.agents/

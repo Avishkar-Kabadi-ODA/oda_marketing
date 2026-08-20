@@ -13,7 +13,7 @@ class ContentItem(Document):
 		self.validate_assigned_to_reviewer_mutual_exclusion()
 		self.validate_creation_permissions()
 		self.validate_metadata_edit_permissions()
-		self.validate_writer_readonly_before_briefed()
+		self.validate_writer_readonly_before_inprogress()
 		self.validate_reviewer_readonly_fields()
 		self.validate_workflow_transition_permissions()
 		self.sync_status_with_workflow()
@@ -154,21 +154,24 @@ class ContentItem(Document):
 			user = frappe.session.user
 		if user == "Administrator":
 			return "Lead"
+
 		user_lower = (user or "").lower()
 		assigned_lower = (self.assigned_to or "").lower()
-		reviewer_lower = (self.reviewer_technical or "").lower()
 
-		# Document-level authorship takes precedence: an author is strictly a Writer for this doc
+		# Ground Rule: Document-level assigned author acts strictly as Writer for this deliverable
 		if user_lower == assigned_lower:
 			return "Writer"
-		if user_lower == reviewer_lower:
-			return "Reviewer"
 
+		# Global administrative authority (Marketing Lead / System Manager)
 		roles = frappe.get_roles(user)
 		if "Marketing Lead" in roles or "System Manager" in roles:
 			return "Lead"
-		if "Technical Reviewer" in roles:
+
+		# Document-level reviewer assignment takes effect for non-Lead users
+		reviewer_lower = (self.reviewer_technical or "").lower()
+		if user_lower == reviewer_lower:
 			return "Reviewer"
+
 		return "Writer"
 
 	def validate_description_length(self):
@@ -179,19 +182,20 @@ class ContentItem(Document):
 			)
 
 
-	def is_lead_user(self):
-		user = frappe.session.user
+	def is_lead_user(self, user=None):
+		if not user:
+			user = frappe.session.user
 		if user == "Administrator":
 			return True
 		roles = frappe.get_roles(user)
 		return "Marketing Lead" in roles or "System Manager" in roles
 
-	def is_reviewer_user(self):
-		user = frappe.session.user
+	def is_reviewer_user(self, user=None):
+		if not user:
+			user = frappe.session.user
 		if user == "Administrator":
 			return True
-		roles = frappe.get_roles(user)
-		return "Technical Reviewer" in roles
+		return (user or "").lower() == (self.reviewer_technical or "").lower()
 
 	def validate_creation_permissions(self):
 		if frappe.flags.ignore_permissions or self.flags.ignore_permissions:
@@ -224,13 +228,14 @@ class ContentItem(Document):
 					if str(val_self or "") != str(val_before or ""):
 						frappe.throw(_("Only <b>Marketing Leads</b> are permitted to modify core item metadata ({0}).").format(field), frappe.PermissionError)
 
-	def validate_writer_readonly_before_briefed(self):
-		"""Content Writer cannot edit attachments or notes while item is in Planned state."""
+	def validate_writer_readonly_before_inprogress(self):
+		"""Content Writer cannot edit attachments or notes while item is in Planned or Briefed state (before work is started)."""
 		if frappe.flags.ignore_permissions or self.flags.ignore_permissions:
 			return
 		if self.get_user_effective_role() == "Lead":
 			return
-		if getattr(self, "workflow_state", None) != "Planned":
+		state = getattr(self, "workflow_state", None) or getattr(self, "status", None) or "Planned"
+		if state not in ["Planned", "Briefed"]:
 			return
 
 		before = self.get_doc_before_save()
@@ -243,7 +248,7 @@ class ContentItem(Document):
 			val_before = getattr(before, field, None)
 			if str(val_self or "") != str(val_before or ""):
 				frappe.throw(
-					_("Content Writers cannot edit attachments or notes while the item is in <b>Planned</b> state. Wait until the brief is issued."),
+					_("Content Writers cannot edit attachments or notes before starting work (status must be <b>In Progress</b> or <b>In Revision</b>)."),
 					frappe.PermissionError
 				)
 
@@ -639,7 +644,7 @@ from openpyxl.utils import get_column_letter
 
 @frappe.whitelist()
 def get_reviewer_users(doctype=None, txt="", searchfield="name", start=0, page_len=20, filters=None):
-	"""Filters Reviewer link dropdown to show active System Users holding Technical Reviewer, Marketing Lead, or System Manager role. Excludes the assigned writer if provided."""
+	"""Filters Reviewer link dropdown to show active System Users. Excludes the assigned writer if provided."""
 	exclude_user = None
 	if isinstance(filters, dict):
 		exclude_user = filters.get("assigned_to") or filters.get("exclude_user")
@@ -655,7 +660,7 @@ def get_reviewer_users(doctype=None, txt="", searchfield="name", start=0, page_l
 	conditions = [
 		"u.enabled = 1",
 		"u.user_type = 'System User'",
-		"(r.role IN ('Technical Reviewer', 'Marketing Lead', 'System Manager') OR u.name = 'Administrator')"
+		"u.name != 'Administrator'"
 	]
 	params = []
 	if exclude_user:
@@ -670,7 +675,6 @@ def get_reviewer_users(doctype=None, txt="", searchfield="name", start=0, page_l
 	return frappe.db.sql(f"""
 		SELECT DISTINCT u.name, CONCAT_WS(' ', u.first_name, u.last_name)
 		FROM `tabUser` u
-		LEFT JOIN `tabHas Role` r ON r.parent = u.name
 		WHERE {where_clause}
 		ORDER BY u.name ASC
 		LIMIT %s, %s

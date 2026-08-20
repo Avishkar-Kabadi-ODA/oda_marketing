@@ -92,13 +92,7 @@
    "create": 0,
    "delete": 0,
    "read": 1,
-   "role": "Content Writer"
-  },
-  {
-   "create": 0,
-   "delete": 0,
-   "read": 1,
-   "role": "Technical Reviewer"
+   "role": "All"
   }
  ],
  "sort_field": "sort_order",

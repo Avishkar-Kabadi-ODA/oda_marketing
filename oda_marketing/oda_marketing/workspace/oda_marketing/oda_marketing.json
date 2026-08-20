@@ -23,7 +23,6 @@
     "roles": [
         {"role": "System Manager"},
         {"role": "Marketing Lead"},
-        {"role": "Technical Reviewer"},
         {"role": "All"}
     ],
     "sequence_id": 1,

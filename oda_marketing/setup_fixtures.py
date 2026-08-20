@@ -8,8 +8,6 @@ from frappe.utils import add_days, getdate
 def setup_roles():
 	roles = [
 		{"role_name": "Marketing Lead", "desk_access": 1},
-		{"role_name": "Content Writer", "desk_access": 1},
-		{"role_name": "Technical Reviewer", "desk_access": 1},
 	]
 	for r in roles:
 		if not frappe.db.exists("Role", r["role_name"]):
@@ -284,39 +282,26 @@ def setup_workflow():
 	]
 
 	transitions = [
-		# Planned -> Briefed
+		# Planned -> Briefed (Lead only)
 		{"state": "Planned", "action": "Issue Brief", "next_state": "Briefed", "allowed": "Marketing Lead"},
 		{"state": "Planned", "action": "Issue Brief", "next_state": "Briefed", "allowed": "System Manager"},
 
 		# Briefed -> In Progress (writer starts work, stamps brief_accepted_on)
 		{"state": "Briefed", "action": "Start Work", "next_state": "In Progress", "allowed": "All"},
-		{"state": "Briefed", "action": "Start Work", "next_state": "In Progress", "allowed": "Technical Reviewer"},
-		{"state": "Briefed", "action": "Start Work", "next_state": "In Progress", "allowed": "Marketing Lead"},
-		{"state": "Briefed", "action": "Start Work", "next_state": "In Progress", "allowed": "System Manager"},
 
-		# In Progress -> In Review (direct human review)
+		# In Progress -> In Review (writer submits draft)
 		{"state": "In Progress", "action": "Submit for Review", "next_state": "In Review", "allowed": "All"},
-		{"state": "In Progress", "action": "Submit for Review", "next_state": "In Review", "allowed": "Technical Reviewer"},
-		{"state": "In Progress", "action": "Submit for Review", "next_state": "In Review", "allowed": "Marketing Lead"},
-		{"state": "In Progress", "action": "Submit for Review", "next_state": "In Review", "allowed": "System Manager"},
 
 		# In Review -> In Revision (reviewer requests changes)
-		{"state": "In Review", "action": "Request Changes", "next_state": "In Revision", "allowed": "Technical Reviewer"},
-		{"state": "In Review", "action": "Request Changes", "next_state": "In Revision", "allowed": "Marketing Lead"},
-		{"state": "In Review", "action": "Request Changes", "next_state": "In Revision", "allowed": "System Manager"},
+		{"state": "In Review", "action": "Request Changes", "next_state": "In Revision", "allowed": "All"},
 
 		# In Review -> Approved (reviewer approves)
-		{"state": "In Review", "action": "Approve", "next_state": "Approved", "allowed": "Technical Reviewer"},
-		{"state": "In Review", "action": "Approve", "next_state": "Approved", "allowed": "Marketing Lead"},
-		{"state": "In Review", "action": "Approve", "next_state": "Approved", "allowed": "System Manager"},
+		{"state": "In Review", "action": "Approve", "next_state": "Approved", "allowed": "All"},
 
-		# In Revision -> In Progress (writer resubmits, gets choice again)
+		# In Revision -> In Progress (writer resubmits draft)
 		{"state": "In Revision", "action": "Resubmit Draft", "next_state": "In Progress", "allowed": "All"},
-		{"state": "In Revision", "action": "Resubmit Draft", "next_state": "In Progress", "allowed": "Technical Reviewer"},
-		{"state": "In Revision", "action": "Resubmit Draft", "next_state": "In Progress", "allowed": "Marketing Lead"},
-		{"state": "In Revision", "action": "Resubmit Draft", "next_state": "In Progress", "allowed": "System Manager"},
 
-		# Approved -> Published
+		# Approved -> Published (Lead/Publisher only)
 		{"state": "Approved", "action": "Publish", "next_state": "Published", "allowed": "Marketing Lead"},
 		{"state": "Approved", "action": "Publish", "next_state": "Published", "allowed": "System Manager"},
 	]

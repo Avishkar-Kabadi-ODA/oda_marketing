@@ -210,39 +210,5 @@ class TestAIAgentEngine(unittest.TestCase):
 				"description": long_topic,
 			})
 
-	def test_mutually_exclusive_marketing_roles(self):
-		"""Tests that assigning multiple marketing roles to a single User raises ValidationError."""
-		from oda_marketing.permissions import validate_user_marketing_roles
-		user_doc = frappe.get_doc({
-			"doctype": "User",
-			"email": "test_multi_role@oda.local",
-			"first_name": "Test Multi Role",
-			"roles": [
-				{"role": "Content Writer"},
-				{"role": "Technical Reviewer"}
-			]
-		})
-		with self.assertRaises(frappe.ValidationError):
-			validate_user_marketing_roles(user_doc)
-
-	def test_auto_assign_content_writer_role(self):
-		"""Tests that saving a Content Item automatically grants Content Writer role to assigned_to user if missing."""
-		user_email = "new_writer_candidate@oda.local"
-		if not frappe.db.exists("User", user_email):
-			u = frappe.get_doc({
-				"doctype": "User",
-				"email": user_email,
-				"first_name": "New Candidate",
-				"send_welcome_email": 0
-			})
-			u.insert(ignore_permissions=True)
-
-		item = _create_test_item({
-			"assigned_to": user_email
-		})
-
-		user_roles = frappe.get_roles(user_email)
-		self.assertIn("Content Writer", user_roles)
-
 	def tearDown(self):
 		frappe.db.rollback()

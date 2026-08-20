@@ -211,15 +211,15 @@ frappe.ui.form.on("Content Item", {
 			}, 300);
 		}
 
-		// Writer read-only enforcement before Briefed state
-		const is_planned = frm.doc.workflow_state === "Planned";
+		// Writer read-only enforcement before In Progress state
+		const is_before_inprogress = ["Planned", "Briefed"].includes(frm.doc.workflow_state);
 
-		if (is_doc_writer) {
+		if (is_doc_writer && !is_lead) {
 			// Effective role is Writer on this document
-			frm.set_df_property("content_file_1", "read_only", is_planned ? 1 : 0);
-			frm.set_df_property("content_file_2", "read_only", is_planned ? 1 : 0);
-			frm.set_df_property("content_file_3", "read_only", is_planned ? 1 : 0);
-			frm.set_df_property("notes", "read_only", is_planned ? 1 : 0);
+			frm.set_df_property("content_file_1", "read_only", is_before_inprogress ? 1 : 0);
+			frm.set_df_property("content_file_2", "read_only", is_before_inprogress ? 1 : 0);
+			frm.set_df_property("content_file_3", "read_only", is_before_inprogress ? 1 : 0);
+			frm.set_df_property("notes", "read_only", is_before_inprogress ? 1 : 0);
 			frm.set_df_property("revision_feedback_notes", "read_only", 1);
 
 			// Strictly hide Reviewer Instructions from Writer

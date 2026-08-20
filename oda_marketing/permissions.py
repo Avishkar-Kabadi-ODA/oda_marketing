@@ -11,7 +11,7 @@ def has_app_permission(user=None):
 	if user == "Administrator":
 		return True
 	roles = frappe.get_roles(user)
-	allowed = {"System Manager", "Marketing Lead", "Technical Reviewer", "Content Writer", "Desk User", "Employee", "All"}
+	allowed = {"System Manager", "Marketing Lead", "Desk User", "Employee", "All"}
 	return bool(allowed & set(roles)) or frappe.session.user == user
 
 

@@ -47,8 +47,9 @@
   +------------------------------------------------------------------------------------------------------------------+
   | [ STATE 3: IN PROGRESS ]                                                                                         |
   | - Drafting   : Writer uploads Primary Draft (`content_file_1`) and Supporting Assets (`content_file_2`, `_3`).    |
+  |                (Allowed formats: Markdown .md, Images .png/.svg/.jpeg/.jpg/.webp, or Web Links. No PDF/DOCX).     |
   | - Notes      : Writer writes Working Notes / Draft Copy in `notes`.                                              |
-  | - Due Date   : Writer CAN modify `due_date` if timelines shift.                                                  |
+  | - Due Date   : Writer CANNOT modify `due_date` (Lead-only metadata).                                            |
   |                                                                                                                  |
   | + - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -+ |
   | : OPTIONAL: AI COPILOT WRITER REVIEW (Triggered manually via Action Button or API: `trigger_ai_copilot`)        : |
@@ -69,7 +70,7 @@
                                         |
                                         | Action: "Submit for Review"
                                         | Triggered by: Assigned Content Writer (or Lead)
-                                        | Validation  : `content_file_1` (Primary Draft Attachment) is MANDATORY.
+                                        | Validation  : `content_file_1` is MANDATORY (Markdown/Image/URL only).
                                         | Hook        : Sends "Marketing Reviewer Notification" email to reviewer.
                                         v
   +------------------------------------------------------------------------------------------------------------------+

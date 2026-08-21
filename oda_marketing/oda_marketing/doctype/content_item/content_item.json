@@ -178,17 +178,20 @@
    "label": "Content Drafts & Attachments"
   },
   {
+   "description": "Allowed: Markdown (.md, .markdown), Images (.png, .svg, .jpeg, .jpg, .webp), or Web URL (http/https). No PDF or DOCX allowed.",
    "fieldname": "content_file_1",
    "fieldtype": "Attach",
    "in_list_view": 1,
    "label": "Primary Content Draft (Mandatory for Review)"
   },
   {
+   "description": "Allowed: Markdown (.md, .markdown), Images (.png, .svg, .jpeg, .jpg, .webp), or Web URL (http/https). No PDF or DOCX allowed.",
    "fieldname": "content_file_2",
    "fieldtype": "Attach",
    "label": "Supporting Asset 1 (Optional)"
   },
   {
+   "description": "Allowed: Markdown (.md, .markdown), Images (.png, .svg, .jpeg, .jpg, .webp), or Web URL (http/https). No PDF or DOCX allowed.",
    "fieldname": "content_file_3",
    "fieldtype": "Attach",
    "label": "Supporting Asset 2 (Optional)"

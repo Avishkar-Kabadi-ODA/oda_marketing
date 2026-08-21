@@ -196,15 +196,10 @@ frappe.ui.form.on("Content Item", {
 		if (!is_lead) {
 			const metadata_fields = [
 				"title", "content_type", "description", "industry_domain",
-				"content_calendar", "planned_publish_date", "assigned_to",
+				"content_calendar", "planned_publish_date", "due_date", "assigned_to",
 				"reviewer_technical", "published_url", "risk_flag"
 			];
 			metadata_fields.forEach(field => frm.set_df_property(field, "read_only", 1));
-
-			// Due Date is editable by Content Writer
-			if (is_doc_writer || (!is_doc_reviewer && !is_lead)) {
-				frm.set_df_property("due_date", "read_only", 0);
-			}
 
 			setTimeout(() => {
 				$("a:contains('Edit Sidebar'), .sidebar-item-container:contains('Edit Sidebar')").hide();
@@ -307,7 +302,55 @@ frappe.ui.form.on("Content Item", {
 			const current_len = String(desc_val).trim().length;
 			frappe.msgprint(__("<b>Description</b> exceeds maximum limit of 500 characters. (Current length: {0} characters)", [current_len]));
 			frappe.validated = false;
+			return;
 		}
+
+		if (!frm.events.validate_attachment_format(frm, "content_file_1", __("Primary Content Draft"))) {
+			frappe.validated = false;
+			return;
+		}
+		if (!frm.events.validate_attachment_format(frm, "content_file_2", __("Supporting Asset 1"))) {
+			frappe.validated = false;
+			return;
+		}
+		if (!frm.events.validate_attachment_format(frm, "content_file_3", __("Supporting Asset 2"))) {
+			frappe.validated = false;
+			return;
+		}
+	},
+
+	validate_attachment_format(frm, fieldname, label) {
+		const val = frm.doc[fieldname];
+		if (!val) return true;
+		const val_str = String(val).trim();
+		if (!val_str) return true;
+
+		const val_lower = val_str.toLowerCase();
+		if (val_lower.startsWith("http://") || val_lower.startsWith("https://")) {
+			return true;
+		}
+
+		const allowed_extensions = [".md", ".markdown", ".png", ".svg", ".jpeg", ".jpg", ".webp", ".gif"];
+		const url_path = val_str.split("?")[0].split("#")[0];
+		const ext = url_path.substring(url_path.lastIndexOf(".")).toLowerCase();
+
+		if (!allowed_extensions.includes(ext)) {
+			frappe.msgprint(__("<b>{0}</b> has an unsupported file format (<code>{1}</code>).<br>Only <b>Markdown files (.md, .markdown)</b>, <b>Images (.png, .svg, .jpeg, .jpg, .webp)</b>, or <b>Web links (http/https)</b> are permitted.<br><span style='color: #dc2626; font-weight: 600;'>PDF, DOCX, and other file formats are restricted.</span>", [label, ext || val_str]));
+			return false;
+		}
+		return true;
+	},
+
+	content_file_1(frm) {
+		frm.trigger("validate_attachment_format", "content_file_1", __("Primary Content Draft"));
+	},
+
+	content_file_2(frm) {
+		frm.trigger("validate_attachment_format", "content_file_2", __("Supporting Asset 1"));
+	},
+
+	content_file_3(frm) {
+		frm.trigger("validate_attachment_format", "content_file_3", __("Supporting Asset 2"));
 	},
 
 	description(frm) {

@@ -93,17 +93,7 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 		frappe.set_user("writer.test@oda.local")
 		item.reload()
 		item.title = "Modified Title By Writer"
-		self.assertRaises(frappe.PermissionError, item.save)
-
-		# Writer attempts to modify due date -> SUCCEEDS (Due Date is now editable by writer)
-		item.reload()
-		item.due_date = "2026-10-10"
-		# Note: Writer cannot edit attachments in Planned state, but Due Date is carved out.
-		# However, item is in "Planned" state, so writer can't save at all because
-		# Frappe workflow only allows "Marketing Lead" to edit in Planned state.
-		# Let's move item to Briefed first via Lead, then test.
-
-		# Move item to Briefed -> In Progress so Writer can edit
+		# Move item to Briefed -> In Progress so Writer can edit attachments/notes
 		frappe.set_user("lead.test@oda.local")
 		item.reload()
 		apply_workflow(item, "Issue Brief")
@@ -114,16 +104,14 @@ class TestMarketingOperationsFlow(unittest.TestCase):
 		apply_workflow(item, "Start Work")
 		frappe.db.commit()
 
-		# Writer can now edit Due Date in "In Progress" state
+		# Writer attempts to modify due date in "In Progress" state -> FAILS (Due Date is restricted to Marketing Leads)
 		item.reload()
 		item.due_date = "2026-10-10"
-		item.save()
-		self.assertEqual(str(item.due_date), "2026-10-10")
-		frappe.db.commit()
+		self.assertRaises(frappe.PermissionError, item.save)
 
 		# Writer updates content_file_1, content_file_2, content_file_3 in In Progress -> succeeds
 		item.reload()
-		item.content_file_1 = "/files/primary_draft.pdf"
+		item.content_file_1 = "/files/primary_draft.md"
 		item.content_file_2 = "/files/asset_1.png"
 		item.content_file_3 = "/files/asset_2.png"
 		item.save()

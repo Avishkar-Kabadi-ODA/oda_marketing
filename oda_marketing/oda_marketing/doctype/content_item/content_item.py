@@ -19,6 +19,7 @@ class ContentItem(Document):
 		self.sync_status_with_workflow()
 		self.validate_publish_date_with_calendar()
 		self.check_overdue_sla()
+		self.validate_attachment_file_formats()
 		self.validate_primary_attachment_mandatory()
 		self.validate_technical_reviewer_mandatory()
 		self.validate_revision_notes()
@@ -211,17 +212,16 @@ class ContentItem(Document):
 			before = self.get_doc_before_save()
 			if not before:
 				return
-			# due_date is explicitly excluded — Content Writers can edit Due Date
 			metadata_fields = [
 				"title", "content_type", "description", "industry_domain",
-				"content_calendar", "planned_publish_date", "assigned_to",
+				"content_calendar", "planned_publish_date", "due_date", "assigned_to",
 				"reviewer_technical"
 			]
 			for field in metadata_fields:
 				val_self = getattr(self, field, None)
 				val_before = getattr(before, field, None)
 
-				if field in ["planned_publish_date"]:
+				if field in ["planned_publish_date", "due_date"]:
 					if val_self and val_before and getdate(val_self) != getdate(val_before):
 						frappe.throw(_("Only <b>Marketing Leads</b> are permitted to modify core item metadata ({0}).").format(field), frappe.PermissionError)
 				else:
@@ -313,6 +313,39 @@ class ContentItem(Document):
 			if self.due_date and getattr(self, "workflow_state", None) not in ["Approved", "Published"]:
 				if getdate(nowdate()) > getdate(self.due_date):
 					self.risk_flag = "Late"
+
+	def validate_attachment_file_formats(self):
+		"""Restricts attachment fields to Markdown files (.md, .markdown), Images (.png, .svg, .jpeg, .jpg, .webp, .gif), or web links (http/https). PDF, DOCX, and other formats are restricted."""
+		allowed_extensions = {".md", ".markdown", ".png", ".svg", ".jpeg", ".jpg", ".webp", ".gif"}
+		attachment_fields = [
+			("content_file_1", "Primary Content Draft"),
+			("content_file_2", "Supporting Asset 1"),
+			("content_file_3", "Supporting Asset 2")
+		]
+
+		import urllib.parse
+		import os
+
+		for fieldname, label in attachment_fields:
+			val = getattr(self, fieldname, None)
+			if not val:
+				continue
+			val_str = str(val).strip()
+			if not val_str:
+				continue
+
+			val_lower = val_str.lower()
+			if val_lower.startswith("http://") or val_lower.startswith("https://"):
+				continue
+
+			path = urllib.parse.urlparse(val_str).path
+			ext = os.path.splitext(path)[1].lower()
+
+			if ext not in allowed_extensions:
+				frappe.throw(
+					_("<b>{0}</b> has an unsupported file format (<code>{1}</code>). Only <b>Markdown files (.md, .markdown)</b>, <b>Images (.png, .svg, .jpeg, .jpg, .webp)</b>, or <b>Web Links (http/https)</b> are allowed. (PDF, DOCX, and other formats are restricted).").format(label, ext or val_str),
+					frappe.ValidationError
+				)
 
 	def validate_primary_attachment_mandatory(self):
 		target_states = ["In Review", "Approved", "Published"]

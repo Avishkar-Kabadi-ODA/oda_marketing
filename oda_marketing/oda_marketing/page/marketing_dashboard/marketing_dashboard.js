@@ -25,11 +25,18 @@ class MarketingOperationsDashboard {
 		this.wrapper = $(page.body);
 		this.charts = {};
 		this.options_loaded = false;
+		this.last_data = null;
 
 		this.setup_header_actions();
 		this.render_layout();
 		this.bind_filter_events();
 		this.fetch_data();
+
+		$(window).off("resize.marketing_dashboard").on("resize.marketing_dashboard", frappe.utils.debounce(() => {
+			if (this.last_data) {
+				this.render_charts(this.last_data);
+			}
+		}, 200));
 	}
 
 
@@ -215,6 +222,7 @@ class MarketingOperationsDashboard {
 							<i class="octicon octicon-pulse" style="color: #4F46E5;"></i> Workflow Pipeline Funnel
 						</div>
 						<div id="chart-status-funnel" class="chart-container"></div>
+						<div id="funnel-custom-legend" class="dashboard-custom-legend"></div>
 					</div>
 
 					<div class="chart-card">
@@ -298,6 +306,7 @@ class MarketingOperationsDashboard {
 			callback(res) {
 				if (res && res.message) {
 					const data = res.message;
+					me.last_data = data;
 					if (!me.options_loaded) {
 						me.populate_dynamic_options(data);
 						me.options_loaded = true;
@@ -381,21 +390,59 @@ class MarketingOperationsDashboard {
 
 	render_charts(data) {
 		// 1. Status Funnel Donut Chart
+		const status_color_map = {
+			"Planned": "#64748B",
+			"Briefed": "#2563EB",
+			"In Progress": "#EA580C",
+			"In Review": "#CA8A04",
+			"In Revision": "#DC2626",
+			"Approved": "#0891B2",
+			"Published": "#059669"
+		};
+
 		const status_labels = Object.keys(data.status_distribution || {});
 		const status_values = Object.values(data.status_distribution || {});
-		const status_colors = ["#94A3B8", "#3B82F6", "#F97316", "#EAB308", "#EF4444", "#06B6D4", "#10B981"];
+		const status_colors = status_labels.map(lbl => status_color_map[lbl] || "#6366F1");
 
 		$("#chart-status-funnel").empty();
-		new frappe.Chart("#chart-status-funnel", {
+		this.charts.status_funnel = new frappe.Chart("#chart-status-funnel", {
 			title: "",
 			data: {
-				labels: status_labels,
-				datasets: [{ name: __("Deliverables"), values: status_values }]
+				labels: status_labels.length ? status_labels : ["None"],
+				datasets: [{ name: __("Deliverables"), values: status_values.length ? status_values : [0] }]
 			},
 			type: "donut",
-			height: 230,
-			colors: status_colors
+			height: 290,
+			colors: status_colors,
+			maxSlices: 8,
+			truncateLegends: 0
 		});
+
+		// Responsive custom status pills below the donut chart
+		const $legendContainer = $("#funnel-custom-legend");
+		$legendContainer.empty();
+		if (status_labels.length > 0) {
+			const total_items = status_values.reduce((a, b) => a + b, 0);
+			status_labels.forEach((label, idx) => {
+				const val = status_values[idx] || 0;
+				const color = status_colors[idx] || "#64748B";
+				const pct = total_items > 0 ? Math.round((val / total_items) * 100) : 0;
+				$legendContainer.append(`
+					<div class="legend-pill" data-state="${label}" title="${label}: ${val} (${pct}%) • Click to filter">
+						<span class="legend-dot" style="background-color: ${color};"></span>
+						<span class="legend-name">${label}</span>
+						<span class="legend-count">${val}</span>
+					</div>
+				`);
+			});
+
+			$legendContainer.find(".legend-pill").on("click", function() {
+				const st = $(this).data("state");
+				if (st) {
+					frappe.set_route("List", "Content Item", { workflow_state: st });
+				}
+			});
+		}
 
 		// 2. Monthly Cadence Bar Chart
 		const monthly_data = data.monthly_trend || [];
@@ -403,14 +450,14 @@ class MarketingOperationsDashboard {
 		const month_values = monthly_data.map(m => m.count);
 
 		$("#chart-monthly-cadence").empty();
-		new frappe.Chart("#chart-monthly-cadence", {
+		this.charts.monthly_cadence = new frappe.Chart("#chart-monthly-cadence", {
 			title: "",
 			data: {
 				labels: month_labels,
 				datasets: [{ name: __("Deliverables"), values: month_values }]
 			},
 			type: "bar",
-			height: 230,
+			height: 240,
 			colors: ["#6366F1"]
 		});
 
@@ -419,14 +466,14 @@ class MarketingOperationsDashboard {
 		const format_values = Object.values(data.format_distribution || {});
 
 		$("#chart-format-mix").empty();
-		new frappe.Chart("#chart-format-mix", {
+		this.charts.format_mix = new frappe.Chart("#chart-format-mix", {
 			title: "",
 			data: {
 				labels: format_labels.length ? format_labels : ["None"],
 				datasets: [{ name: __("Deliverables"), values: format_values.length ? format_values : [0] }]
 			},
 			type: "bar",
-			height: 230,
+			height: 240,
 			colors: ["#8B5CF6"]
 		});
 
@@ -435,14 +482,14 @@ class MarketingOperationsDashboard {
 		const domain_values = Object.values(data.domain_distribution || {});
 
 		$("#chart-domain-breakdown").empty();
-		new frappe.Chart("#chart-domain-breakdown", {
+		this.charts.domain_breakdown = new frappe.Chart("#chart-domain-breakdown", {
 			title: "",
 			data: {
 				labels: domain_labels.length ? domain_labels : ["None"],
 				datasets: [{ name: __("Deliverables"), values: domain_values.length ? domain_values : [0] }]
 			},
 			type: "bar",
-			height: 230,
+			height: 240,
 			colors: ["#0EA5E9"]
 		});
 	}

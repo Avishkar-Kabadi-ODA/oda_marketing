@@ -10,7 +10,8 @@
 * **Planned-State Privacy:** Non-leads (`assigned_to` and `reviewer_technical`) cannot view deliverables in `Planned` state. Items only become visible once moved to `Briefed` or `In Progress`.
 * **Anti-Self-Review Rule:** `assigned_to` and `reviewer_technical` cannot be the same user. If a `Marketing Lead` is listed as `assigned_to`, their lead authority on that document is revoked—they act strictly as a Writer and cannot approve their own item.
 * **Attachment & Note Locking:** Writers cannot modify attachments (`content_file_1`, `content_file_2`, `content_file_3`) or `notes` in `Planned` or `Briefed` states. They unlock upon clicking `Start Work` (`In Progress`).
-* **Due Date Modification:** Content Writers are allowed to adjust `due_date` in `In Progress` and `In Revision` states to manage schedules.
+* **Attachment File Format Restrictions:** Attachment fields (`content_file_1`, `content_file_2`, `content_file_3`) strictly accept **Markdown (.md, .markdown)**, **Images (.png, .svg, .jpeg, .jpg, .webp, .gif)**, or **Web URLs (http/https)**. PDF, DOCX, and other binary formats are restricted.
+* **Due Date Lock:** Due Date is restricted to Marketing Leads. Content Writers cannot edit or update `due_date`.
 
 ## 3. Frappe Workflow Invariants
 * **Concrete Role Bindings:** When defining workflow states (`allow_edit`) and transitions (`allowed`), always use concrete database roles (`Desk User`, `Marketing Lead`, `System Manager`). Never use the pseudo-role `"All"`.

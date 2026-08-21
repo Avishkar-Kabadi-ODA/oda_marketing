@@ -165,8 +165,106 @@
 }
 
 .chart-container {
-	min-height: 240px;
+	min-height: 280px;
 	width: 100%;
+	position: relative;
+	overflow: visible;
+}
+
+.chart-container .frappe-chart {
+	width: 100%;
+}
+
+.chart-container svg {
+	width: 100% !important;
+	max-width: 100% !important;
+	overflow: visible !important;
+}
+
+/* Dedicated sizing & centering for Workflow Pipeline Funnel */
+#chart-status-funnel {
+	min-height: 290px;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+}
+
+#chart-status-funnel .frappe-chart {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+}
+
+#chart-status-funnel svg.frappe-chart-graphic {
+	height: 290px !important;
+	max-height: 290px;
+	margin: 0 auto;
+	display: block;
+}
+
+/* Hide SVG built-in clipped legend for funnel since custom responsive pill legend is rendered */
+#chart-status-funnel .chart-legend,
+#chart-status-funnel .legend-group {
+	display: none !important;
+}
+
+/* Responsive Custom Legend for Funnel */
+.dashboard-custom-legend {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px 10px;
+	justify-content: center;
+	align-items: center;
+	margin-top: 16px;
+	padding-top: 14px;
+	border-top: 1px solid #F1F5F9;
+	width: 100%;
+}
+
+.legend-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	background: #F8FAFC;
+	border: 1px solid #E2E8F0;
+	border-radius: 20px;
+	padding: 4px 10px;
+	font-size: 11px;
+	font-weight: 500;
+	color: #334155;
+	cursor: pointer;
+	transition: all 0.15s ease;
+	user-select: none;
+}
+
+.legend-pill:hover {
+	background: #EEF2F6;
+	border-color: #CBD5E1;
+	transform: translateY(-1px);
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.legend-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	display: inline-block;
+	flex-shrink: 0;
+}
+
+.legend-name {
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.legend-count {
+	background: #FFFFFF;
+	color: #475569;
+	border: 1px solid #CBD5E1;
+	border-radius: 10px;
+	padding: 0px 6px;
+	font-size: 10px;
+	font-weight: 700;
 }
 
 /* Responsive Breakpoints */
@@ -193,10 +291,23 @@
 	.kpi-value {
 		font-size: 20px;
 	}
+
+	.dashboard-custom-legend {
+		gap: 4px 6px;
+	}
+
+	.legend-pill {
+		padding: 3px 8px;
+		font-size: 10px;
+	}
 }
 
 @media (max-width: 480px) {
 	.filter-grid {
 		grid-template-columns: 1fr;
+	}
+
+	.dashboard-custom-legend {
+		justify-content: flex-start;
 	}
 }

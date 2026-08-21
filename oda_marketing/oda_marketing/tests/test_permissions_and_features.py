@@ -262,6 +262,35 @@ class TestPermissionsAndFeatures(FrappeTestCase):
 		self.assertEqual(item_lead.assigned_to, "test_writer_1@example.com")
 		frappe.set_user("Administrator")
 
+	def test_writer_cannot_edit_due_date(self):
+		"""Ensures Content Writer cannot edit or update due_date in any active state."""
+		from frappe.model.workflow import apply_workflow
+		item = frappe.get_doc({
+			"doctype": "Content Item",
+			"title": "Writer Due Date Restriction Test",
+			"content_type": "Blog",
+			"description": "Testing writer due date lock.",
+			"content_calendar": "2026 Test Calendar",
+			"planned_publish_date": "2026-09-15",
+			"due_date": "2026-09-01",
+			"assigned_to": "test_writer_1@example.com",
+			"reviewer_technical": "test_reviewer_1@example.com",
+			"workflow_state": "Planned",
+			"status": "Planned"
+		})
+		item.insert(ignore_permissions=True)
+
+		apply_workflow(item, "Issue Brief")
+		apply_workflow(item, "Start Work")
+		self.assertEqual(item.workflow_state, "In Progress")
+
+		# Writer attempts to update due_date -> raises PermissionError
+		frappe.set_user("test_writer_1@example.com")
+		item_writer = frappe.get_doc("Content Item", item.name)
+		item_writer.due_date = "2026-09-10"
+		self.assertRaises(frappe.PermissionError, item_writer.save)
+		frappe.set_user("Administrator")
+
 	def test_writer_workflow_transitions(self):
 		"""Ensures Content Writer can execute Start Work (Briefed -> In Progress) and Submit for Review (In Progress -> In Review)."""
 		from frappe.model.workflow import apply_workflow
@@ -293,7 +322,7 @@ class TestPermissionsAndFeatures(FrappeTestCase):
 
 		# Attach required primary draft & Writer executes: In Progress -> In Review (Submit for Review)
 		item = frappe.get_doc("Content Item", item.name)
-		item.content_file_1 = "/files/primary_draft.pdf"
+		item.content_file_1 = "/files/primary_draft.md"
 		item.save()
 		apply_workflow(item, "Submit for Review")
 		self.assertEqual(item.workflow_state, "In Review")
@@ -388,7 +417,7 @@ class TestPermissionsAndFeatures(FrappeTestCase):
 		# Advance properly to In Review
 		apply_workflow(item, "Issue Brief")
 		apply_workflow(item, "Start Work")
-		item.content_file_1 = "/files/draft.pdf"
+		item.content_file_1 = "/files/draft.md"
 		item.save(ignore_permissions=True)
 		apply_workflow(item, "Submit for Review")
 		self.assertEqual(item.workflow_state, "In Review")
@@ -420,5 +449,47 @@ class TestPermissionsAndFeatures(FrappeTestCase):
 		apply_workflow(item_rev2, "Approve")
 		self.assertEqual(item_rev2.workflow_state, "Approved")
 		frappe.set_user("Administrator")
+
+	def test_attachment_file_format_restrictions(self):
+		"""Ensures attachment fields only accept Markdown (.md, .markdown), Images (.png, .svg, .jpeg, .jpg, .webp), and web links (http/https). Rejects PDF, DOCX, etc."""
+		item = frappe.get_doc({
+			"doctype": "Content Item",
+			"title": "Attachment Format Restriction Test",
+			"content_type": "Blog",
+			"description": "Testing attachment format restrictions.",
+			"content_calendar": "2026 Test Calendar",
+			"planned_publish_date": "2026-09-15",
+			"due_date": "2026-09-01",
+			"assigned_to": "test_writer_1@example.com",
+			"reviewer_technical": "test_reviewer_1@example.com",
+			"workflow_state": "Planned",
+			"status": "Planned"
+		})
+		item.insert(ignore_permissions=True)
+
+		# 1. Attaching PDF -> should throw ValidationError
+		item.content_file_1 = "/files/sample_draft.pdf"
+		self.assertRaises(frappe.ValidationError, item.save)
+
+		# 2. Attaching DOCX -> should throw ValidationError
+		item.content_file_1 = "/files/sample_draft.docx"
+		self.assertRaises(frappe.ValidationError, item.save)
+
+		# 3. Attaching Markdown file (.md) -> should succeed
+		item.content_file_1 = "/files/sample_draft.md"
+		item.save()
+		self.assertEqual(item.content_file_1, "/files/sample_draft.md")
+
+		# 4. Attaching Image file (.png, .svg, .jpeg) -> should succeed
+		item.content_file_2 = "/files/supporting_chart.png"
+		item.content_file_3 = "/files/architecture.svg"
+		item.save()
+		self.assertEqual(item.content_file_2, "/files/supporting_chart.png")
+		self.assertEqual(item.content_file_3, "/files/architecture.svg")
+
+		# 5. Attaching web link (http/https) -> should succeed
+		item.content_file_1 = "https://docs.google.com/document/d/12345/edit"
+		item.save()
+		self.assertEqual(item.content_file_1, "https://docs.google.com/document/d/12345/edit")
 
 

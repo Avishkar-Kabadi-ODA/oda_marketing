@@ -82,7 +82,7 @@ Access permissions and email dispatches use the exact user mapping matrix below.
   - `assigned_to` (Writer), `reviewer_technical` (**Reviewer**).
   - `brief_accepted_on` (Datetime, read-only, stamped when writer starts work).
   - `status` / `workflow_state` (*Planned, Briefed, In Progress, In Review, In Revision, Approved, Published*).
-  - **Draft Attachments**:
+  - **Draft Attachments (Allowed: Markdown .md, Images .png/.svg/.jpeg/.jpg/.webp, or Web Links. PDF/DOCX restricted)**:
     - `content_file_1` (Attach - **Primary Content Draft (Mandatory for Review & AI Copilot)**).
     - `content_file_2` (Attach - Supporting Asset 1 (Optional)).
     - `content_file_3` (Attach - Supporting Asset 2 (Optional)).
@@ -98,7 +98,7 @@ Access permissions and email dispatches use the exact user mapping matrix below.
 | :--- | :--- | :--- | :--- |
 | **Marketing Lead** | Full (`create: 1, delete: 1`) | Full edit access to all metadata, calendar, options, and publishing fields. | Full View, Download & Replace. |
 | **Default Publisher** | Full (`create: 1, delete: 1`) | Can view all deliverables and edit publishing details. | Full View & Download. |
-| **Content Writer** | **Blocked** (`create: 0, delete: 0`) | Core metadata fields are **read-only**. Can edit `sla_due_date` ("Due Date"), draft attachments (`content_file_1/2/3`), notes, and transition states (`Start Work`, `Submit for Review`, `Resubmit Draft`). Read-only on draft files prior to `Briefed` state. | View, Download & Upload Draft Files (locked in `Planned` state). |
+| **Content Writer** | **Blocked** (`create: 0, delete: 0`) | Core metadata fields (including `due_date`) are **read-only**. Can edit draft attachments (`content_file_1/2/3`), notes, and transition states (`Start Work`, `Submit for Review`, `Resubmit Draft`). Read-only on draft files prior to `In Progress` state. | View, Download & Upload Draft Files (locked in `Planned` state). |
 | **Technical Reviewer** | **Blocked** (`create: 0, delete: 0`) | Core metadata & draft attachments are **read-only**. Can edit `revision_feedback_notes`, `reviewer_copilot_instructions`, and transition states (`Approve`, `Request Changes`). | Full View & Download (Cannot Replace Writer Files). |
 
 ---

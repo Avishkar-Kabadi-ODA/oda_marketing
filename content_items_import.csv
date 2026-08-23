@@ -1,0 +1,2 @@
+Title,Format,Description,Industry Domain,Content Calendar,Planned Publish Date,Due Date,Assigned To,Reviewer,Notes
+"AI in Cyber Security: Threat Detection and Autonomous Incident Response","Blog","Comprehensive deep-dive into machine learning anomaly detection, behavioral endpoint analytics, and automated SOAR incident response workflows.","Fintech","","2026-09-15","2026-09-01","avishkar.kabadi@oda.com","kunal.borage@oda.com","Include technical benchmarks on zero-day exploit detection latency, false-positive reduction, and SIEM integration."

@@ -391,9 +391,17 @@ class ContentItem(Document):
 		full_url = get_url(file_path)
 		return f'<a href="{full_url}" target="_blank" style="color: #2563eb; text-decoration: underline; font-weight: 600;">{label}</a>'
 
-	def get_template_context(self):
+	def get_publisher_email(self):
+		"""Returns the format-specific publisher from Content Item Option, falling back to Marketing Settings."""
+		if self.content_type and frappe.db.exists("Content Item Option", self.content_type):
+			format_publisher = frappe.db.get_value("Content Item Option", self.content_type, "default_publisher")
+			if format_publisher:
+				return format_publisher
 		settings = frappe.get_single("Marketing Settings")
-		publisher_email = settings.default_publisher if hasattr(settings, "default_publisher") else None
+		return getattr(settings, "default_publisher", None)
+
+	def get_template_context(self):
+		publisher_email = self.get_publisher_email()
 		item_url = get_url(f"/app/content-item/{self.name}")
 
 		context = {
@@ -438,8 +446,7 @@ class ContentItem(Document):
 			subject = f"Revisions Requested: '{self.title}'"
 
 		elif current_state == "Approved":
-			settings = frappe.get_single("Marketing Settings")
-			publisher = getattr(settings, "default_publisher", None)
+			publisher = self.get_publisher_email()
 			if publisher:
 				target_user = publisher
 				subject = f"Approved for Publishing: '{self.title}'"
@@ -480,7 +487,7 @@ class ContentItem(Document):
 		cc = set()
 		template_name = None
 
-		publisher_email = getattr(settings, "default_publisher", None)
+		publisher_email = self.get_publisher_email()
 
 		if current_state == "Briefed":
 			if self.assigned_to:
@@ -492,12 +499,6 @@ class ContentItem(Document):
 		elif current_state == "In Review":
 			if self.reviewer_technical:
 				recipients.add(self.reviewer_technical)
-			if self.assigned_to and self.assigned_to != self.reviewer_technical:
-				cc.add(self.assigned_to)
-			if self.owner and self.owner != self.reviewer_technical:
-				cc.add(self.owner)
-			if publisher_email and publisher_email != self.reviewer_technical:
-				cc.add(publisher_email)
 			template_name = settings.reviewer_email_template
 
 		elif current_state == "In Revision":
@@ -969,17 +970,51 @@ def import_content_items_from_excel(file_url=None, default_calendar=None):
 		elif not frappe.db.exists("Content Calendar", calendar):
 			row_errors.append(f"Content Calendar '{calendar}' does not exist")
 
-		if not planned_pub_date:
-			row_errors.append("Planned Publish Date is mandatory")
-
-		if not due_date:
-			if planned_pub_date:
+		# Normalize and parse date fields supporting multiple formats (YYYY-MM-DD, DD-MM-YYYY, DD/MM/YYYY)
+		def _parse_date(val):
+			if not val:
+				return None
+			if isinstance(val, (frappe.utils.datetime.date, frappe.utils.datetime.datetime)):
+				return str(val)[:10]
+			val_str = str(val).strip()
+			if not val_str:
+				return None
+			try:
+				return str(getdate(val_str))
+			except Exception:
+				pass
+			import datetime
+			for fmt in ("%d-%m-%Y", "%d/%m/%Y", "%d.%m.%Y", "%Y/%m/%d", "%m/%d/%Y", "%m-%d-%Y"):
 				try:
-					due_date = str(add_days(getdate(planned_pub_date), -7))
+					return str(datetime.datetime.strptime(val_str, fmt).date())
+				except ValueError:
+					continue
+			return val_str
+
+		parsed_pub_date = _parse_date(planned_pub_date)
+		parsed_due_date = _parse_date(due_date)
+
+		if not parsed_pub_date:
+			row_errors.append("Planned Publish Date is mandatory")
+		else:
+			try:
+				getdate(parsed_pub_date)
+			except Exception:
+				row_errors.append(f"Invalid Planned Publish Date '{planned_pub_date}'. Expected format: YYYY-MM-DD or DD-MM-YYYY")
+
+		if not parsed_due_date:
+			if parsed_pub_date:
+				try:
+					parsed_due_date = str(add_days(getdate(parsed_pub_date), -7))
 				except Exception:
 					row_errors.append("Due Date is mandatory")
 			else:
 				row_errors.append("Due Date is mandatory")
+		else:
+			try:
+				getdate(parsed_due_date)
+			except Exception:
+				row_errors.append(f"Invalid Due Date '{due_date}'. Expected format: YYYY-MM-DD or DD-MM-YYYY")
 
 		if not assigned_to:
 			row_errors.append("Assigned To writer is mandatory")
@@ -1010,8 +1045,8 @@ def import_content_items_from_excel(file_url=None, default_calendar=None):
 				"description": description,
 				"industry_domain": industry_domain or None,
 				"content_calendar": calendar,
-				"planned_publish_date": planned_pub_date,
-				"due_date": due_date,
+				"planned_publish_date": parsed_pub_date,
+				"due_date": parsed_due_date,
 				"assigned_to": assigned_to,
 				"reviewer_technical": reviewer,
 				"notes": notes or None,

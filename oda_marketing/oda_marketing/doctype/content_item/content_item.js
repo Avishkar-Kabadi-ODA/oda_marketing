@@ -85,12 +85,41 @@ frappe.ui.form.on("Content Item", {
 						if ((writer_copilot_states.includes(frm.doc.workflow_state) || frm.doc.ai_review_status === "Queued") && (is_doc_writer || is_lead)) {
 							if (!writer_limit_reached) {
 								frm.add_custom_button(__("Run AI Copilot Review"), function() {
-									frappe.show_progress(__("Marketing Copilot Review"), 10, 100, __("Initiating AI Copilot Review..."));
+									frappe.show_progress(__("Marketing Copilot Review"), 35, 100, __("Evaluating content deliverable with AI Copilot..."));
 									frappe.call({
 										method: "oda_marketing.oda_marketing.doctype.content_item.content_item.trigger_ai_copilot",
 										args: { docname: frm.doc.name },
+										freeze: true,
+										freeze_message: __("Evaluating content with AI Copilot..."),
 										callback: function(r) {
-											frappe.show_progress(__("Marketing Copilot Review"), 20, 100, __("Evaluating content deliverable with AI Copilot..."));
+											frappe.show_progress(__("Marketing Copilot Review"), 100, 100, __("Review complete!"));
+											setTimeout(function() {
+												try {
+													frappe.hide_progress();
+													frappe.cur_progress = null;
+													$(".modal.progress-modal").modal("hide").remove();
+												} catch (e) {}
+												if (r && r.message) {
+													const score = r.message.ai_score !== undefined ? r.message.ai_score : "";
+													frappe.show_alert({
+														message: (score !== "" && score !== null) ? __("AI Copilot Review completed! Score: {0}%", [score]) : __("AI Copilot Review completed!"),
+														indicator: "green"
+													});
+												}
+												frm.reload_doc().then(() => {
+													frm.trigger("apply_role_field_permissions");
+													frm.refresh_fields();
+												});
+											}, 300);
+										},
+										error: function() {
+											try {
+												frappe.hide_progress();
+												frappe.cur_progress = null;
+												$(".modal.progress-modal").modal("hide").remove();
+											} catch (e) {}
+											frappe.show_alert({ message: __("AI Copilot evaluation encountered an error."), indicator: "red" });
+											frm.reload_doc();
 										}
 									});
 								}, __("Copilot"));
@@ -119,15 +148,44 @@ frappe.ui.form.on("Content Item", {
 										primary_action(values) {
 											d.hide();
 											setTimeout(function() {
-												frappe.show_progress(__("Marketing Copilot Review"), 10, 100, __("Initiating Reviewer Copilot Review..."));
+												frappe.show_progress(__("Marketing Copilot Review"), 35, 100, __("Evaluating content deliverable with Reviewer Copilot..."));
 												frappe.call({
 													method: "oda_marketing.oda_marketing.doctype.content_item.content_item.trigger_reviewer_copilot",
 													args: {
 														docname: frm.doc.name,
 														instructions: values.instructions
 													},
+													freeze: true,
+													freeze_message: __("Evaluating content with Reviewer Copilot..."),
 													callback: function(r) {
-														frappe.show_progress(__("Marketing Copilot Review"), 20, 100, __("Evaluating content deliverable with Reviewer Copilot..."));
+														frappe.show_progress(__("Marketing Copilot Review"), 100, 100, __("Review complete!"));
+														setTimeout(function() {
+															try {
+																frappe.hide_progress();
+																frappe.cur_progress = null;
+																$(".modal.progress-modal").modal("hide").remove();
+															} catch (e) {}
+															if (r && r.message) {
+																const score = r.message.ai_score !== undefined ? r.message.ai_score : "";
+																frappe.show_alert({
+																	message: (score !== "" && score !== null) ? __("Reviewer Copilot Review completed! Score: {0}%", [score]) : __("Reviewer Copilot Review completed!"),
+																	indicator: "green"
+																});
+															}
+															frm.reload_doc().then(() => {
+																frm.trigger("apply_role_field_permissions");
+																frm.refresh_fields();
+															});
+														}, 300);
+													},
+													error: function() {
+														try {
+															frappe.hide_progress();
+															frappe.cur_progress = null;
+															$(".modal.progress-modal").modal("hide").remove();
+														} catch (e) {}
+														frappe.show_alert({ message: __("Reviewer Copilot evaluation encountered an error."), indicator: "red" });
+														frm.reload_doc();
 													}
 												});
 											}, 200);
@@ -148,37 +206,6 @@ frappe.ui.form.on("Content Item", {
 					frm.set_df_property("ai_reviews", "hidden", 1);
 				}
 				frm.trigger("apply_role_field_permissions");
-			}
-		});
-
-		// Listen for realtime streaming socket events from AI Agent (re-bound cleanly on every refresh)
-		frappe.realtime.off("ai_copilot_stream");
-		frappe.realtime.on("ai_copilot_stream", function(data) {
-			if (data && data.docname === frm.doc.name) {
-				if (data.progress >= 100) {
-					frappe.show_progress(__("Marketing Copilot Review"), 100, 100, data.message || __("Review complete!"));
-					setTimeout(() => {
-						try {
-							frappe.hide_progress();
-							frappe.cur_progress = null;
-							$(".modal.progress-modal").modal("hide").remove();
-						} catch (e) {}
-						frappe.show_alert({ message: __("AI Copilot Review completed!"), indicator: "green" });
-						frm.reload_doc().then(() => {
-							frm.trigger("apply_role_field_permissions");
-							frm.refresh_fields();
-						});
-					}, 600);
-				} else if (data.progress === 0 && (data.message || "").includes("failed")) {
-					try {
-						frappe.hide_progress();
-						frappe.cur_progress = null;
-						$(".modal.progress-modal").modal("hide").remove();
-					} catch (e) {}
-					frappe.show_alert({ message: data.message, indicator: "red" });
-				} else {
-					frappe.show_progress(__("Marketing Copilot Review"), data.progress || 50, 100, data.message || __("Evaluating deliverable..."));
-				}
 			}
 		});
 	},

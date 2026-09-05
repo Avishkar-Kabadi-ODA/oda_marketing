@@ -6,8 +6,28 @@ import json
 import frappe
 
 
+def sanitize_payload_for_logging(obj):
+	"""Recursively truncates base64 data URIs and long binary strings for terminal logging."""
+	if isinstance(obj, dict):
+		cleaned = {}
+		for k, v in obj.items():
+			if k in ["url", "data_uri"] and isinstance(v, str) and v.startswith("data:image"):
+				prefix = v.split(";base64,")[0] if ";base64," in v else "data:image"
+				cleaned[k] = f"{prefix};base64,...[{len(v)} chars truncated for display]"
+			elif k in ["data", "base64"] and isinstance(v, str) and len(v) > 200:
+				cleaned[k] = f"{v[:20]}...[{len(v)} chars truncated for display]"
+			else:
+				cleaned[k] = sanitize_payload_for_logging(v)
+		return cleaned
+	elif isinstance(obj, list):
+		return [sanitize_payload_for_logging(i) for i in obj]
+	elif isinstance(obj, str) and obj.startswith("data:image") and len(obj) > 200:
+		return f"{obj[:30]}...[{len(obj)} chars truncated for display]"
+	return obj
+
+
 def log_raw_llm_request(stage_name, provider, url, headers, payload, docname=None):
-	"""Prints full raw HTTP request payload and metadata to terminal stdout."""
+	"""Prints sanitized HTTP request payload and metadata to terminal stdout."""
 	border = "=" * 80
 	print(f"\n{border}", flush=True)
 	print(f"🚀 [RAW LLM HTTP REQUEST] {stage_name.upper()}", flush=True)
@@ -25,16 +45,17 @@ def log_raw_llm_request(stage_name, provider, url, headers, payload, docname=Non
 
 	print(f"{'-' * 80}", flush=True)
 	print("📦 [RAW REQUEST BODY / JSON PAYLOAD]:", flush=True)
-	if isinstance(payload, (dict, list)):
-		print(json.dumps(payload, indent=2, ensure_ascii=False), flush=True)
-	elif isinstance(payload, str):
+	sanitized = sanitize_payload_for_logging(payload)
+	if isinstance(sanitized, (dict, list)):
+		print(json.dumps(sanitized, indent=2, ensure_ascii=False), flush=True)
+	elif isinstance(sanitized, str):
 		try:
-			parsed = json.loads(payload)
+			parsed = json.loads(sanitized)
 			print(json.dumps(parsed, indent=2, ensure_ascii=False), flush=True)
 		except Exception:
-			print(payload, flush=True)
+			print(sanitized, flush=True)
 	else:
-		print(str(payload), flush=True)
+		print(str(sanitized), flush=True)
 	print(f"{border}\n", flush=True)
 	sys.stdout.flush()
 

@@ -5,16 +5,15 @@ import os
 import frappe
 from frappe.utils import get_site_path
 
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".svg", ".gif"}
+MARKDOWN_EXTENSIONS = {".md", ".markdown"}
 
-def extract_file_content(file_relative_path):
-	"""
-	Extracts readable plain text from a given Frappe file attachment path.
-	Supports .txt, .md, .html, .pdf, .docx files.
-	"""
+
+def resolve_disk_path(file_relative_path):
+	"""Resolves the absolute filesystem path for a Frappe file attachment."""
 	if not file_relative_path:
-		return ""
+		return None
 
-	# Resolve absolute file path on disk
 	abs_path = None
 	if frappe.db.exists("File", {"file_url": file_relative_path}):
 		try:
@@ -31,10 +30,43 @@ def extract_file_content(file_relative_path):
 		else:
 			abs_path = file_relative_path
 
-	if not (abs_path and os.path.exists(abs_path)):
-		return f"[File Path Attached: {file_relative_path} (File not found on server disk)]"
+	return abs_path if (abs_path and os.path.exists(abs_path)) else None
 
-	ext = os.path.splitext(abs_path)[1].lower()
+
+def has_markdown_attachment(doc):
+	"""
+	Checks if any of the document's attached files (content_file_1, content_file_2, content_file_3)
+	is a valid Markdown file (.md or .markdown).
+	"""
+	attachment_fields = ["content_file_1", "content_file_2", "content_file_3"]
+	for field in attachment_fields:
+		val = getattr(doc, field, None)
+		if val and str(val).strip():
+			clean_path = str(val).strip().split("?")[0]
+			ext = os.path.splitext(clean_path)[1].lower()
+			if ext in MARKDOWN_EXTENSIONS:
+				return True
+	return False
+
+
+def extract_file_content(file_relative_path):
+	"""
+	Extracts readable plain text from a given Frappe file attachment path.
+	Supports .md, .markdown, .txt, .html, .docx, .pdf files.
+	Image attachments are noted as visual assets without bloating token consumption.
+	"""
+	if not file_relative_path:
+		return ""
+
+	clean_path = str(file_relative_path).strip().split("?")[0]
+	ext = os.path.splitext(clean_path)[1].lower()
+
+	if ext in IMAGE_EXTENSIONS:
+		return f"[Image Attachment: {os.path.basename(clean_path)}]"
+
+	abs_path = resolve_disk_path(file_relative_path)
+	if not abs_path:
+		return f"[File Path Attached: {file_relative_path} (File not found on server disk)]"
 
 	try:
 		if ext == ".docx":
@@ -94,14 +126,14 @@ def extract_file_content(file_relative_path):
 			except Exception:
 				pass
 
-		elif ext in [".html", ".htm", ".xhtml", ".svg", ".xml"]:
+		elif ext in [".html", ".htm", ".xhtml", ".xml"]:
 			with open(abs_path, "r", encoding="utf-8", errors="ignore") as f:
 				html_content = f.read()
 				import re
 				clean_text = re.sub(r'<[^>]+>', ' ', html_content)
 				return clean_text.strip()
 
-		# Universal Text File Reader Fallback (.txt, .md, .csv, .json, .log, .yaml, .rtf, etc.)
+		# Universal Text & Markdown File Reader (.md, .markdown, .txt, .csv, .json, .log, .yaml, .rtf, etc.)
 		with open(abs_path, "r", encoding="utf-8", errors="ignore") as f:
 			content_str = f.read()
 			if content_str and len(content_str.strip()) > 0:

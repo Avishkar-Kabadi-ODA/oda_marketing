@@ -40,12 +40,13 @@ class MarketingSettings(Document):
 			ai_mandatory_fields = [
 				"ai_copilot_passing_score",
 				"ai_provider",
-				"ai_api_key_var",
-				"ai_endpoint_var",
 				"ai_model_name",
 				"subagent_meta_prompt",
 				"evaluator_default_prompt"
 			]
+			if getattr(self, "ai_provider", None) != "Custom":
+				ai_mandatory_fields.extend(["ai_api_key_var", "ai_endpoint_var"])
+
 			for field in ai_mandatory_fields:
 				if not getattr(self, field, None):
 					frappe.throw(_("Field <b>{0}</b> is mandatory when AI Copilot is enabled.").format(self.meta.get_label(field)))

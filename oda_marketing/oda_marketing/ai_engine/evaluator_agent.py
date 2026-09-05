@@ -12,32 +12,40 @@ from oda_marketing.oda_marketing.ai_engine.logger import log_raw_llm_request, lo
 
 def evaluate_content_item(doc, dynamic_system_prompt, user_email=None, reviewer_instructions=None):
 	"""
-	Primary Evaluator Agent: Uses dynamic_system_prompt + extracted draft text to score the document.
+	Primary Evaluator Agent: Uses dynamic_system_prompt + extracted draft text
+	to score the deliverable.
 	Streams progress updates to the user's desk UI via frappe.publish_realtime.
 	Optionally incorporates reviewer-specific instructions.
 	"""
 	docname = doc.name
+
 	publish_stream_event(docname, user_email, "Extracting attachment text and preparing evaluation payload...", progress=20)
 
+	# Extract draft text from markdown / attachments / notes
 	draft_text = get_combined_draft_text(doc)
 
 	reviewer_section = ""
 	if reviewer_instructions and reviewer_instructions.strip():
 		reviewer_section = f"\n\nADDITIONAL REVIEWER INSTRUCTIONS:\n{reviewer_instructions.strip()}"
 
-	option_description = ""
+	format_description = ""
 	if doc.content_type and frappe.db.exists("Content Item Option", doc.content_type):
-		option_description = frappe.db.get_value("Content Item Option", doc.content_type, "option_description") or ""
+		format_description = frappe.db.get_value("Content Item Option", doc.content_type, "option_description") or ""
 
 	industry_domain_val = getattr(doc, "industry_domain", None) or getattr(doc, "practice_area", "Cross-domain")
+	domain_description = ""
+	if industry_domain_val and frappe.db.exists("Content Item Option", industry_domain_val):
+		domain_description = frappe.db.get_value("Content Item Option", industry_domain_val, "option_description") or ""
+
 	description_val = getattr(doc, "description", None) or getattr(doc, "topic", "General Enterprise Analytics")
 
 	user_prompt = f"""
 CONTENT DELIVERABLE TO EVALUATE:
 - Title: {doc.title}
 - Content Type / Format: {doc.content_type}
-- Format Expectations (Option Description): {option_description}
-- Industry Domain: {industry_domain_val}
+- Format Expectations: {format_description or 'Standard deliverable structure'}
+- Industry Domain / Practice Area: {industry_domain_val}
+- Domain Context & Scope: {domain_description or 'Enterprise domain best practices'}
 - Description / Brief: {description_val}
 
 DRAFT CONTENT & ATTACHMENT TEXT:
@@ -98,6 +106,7 @@ Evaluate this deliverable according to your System Prompt criteria and output va
 		elif provider == "Google Gemini":
 			url = f"{llm_cfg['endpoint']}/models/{llm_cfg['model']}:generateContent?key={llm_cfg['api_key']}"
 			headers = {"Content-Type": "application/json"}
+
 			payload = {
 				"system_instruction": {"parts": [{"text": dynamic_system_prompt}]},
 				"contents": [{"parts": [{"text": user_prompt}]}],
@@ -127,6 +136,7 @@ Evaluate this deliverable according to your System Prompt criteria and output va
 				"x-api-key": llm_cfg["api_key"],
 				"anthropic-version": "2023-06-01"
 			}
+
 			payload = {
 				"model": llm_cfg["model"],
 				"system": dynamic_system_prompt,
@@ -152,62 +162,29 @@ Evaluate this deliverable according to your System Prompt criteria and output va
 				return format_eval_result(res_json)
 
 	except Exception as e:
-		frappe.log_error(f"Primary Agent LLM Evaluation Error: {str(e)}")
+		frappe.log_error(f"Stage 2 Primary Evaluator LLM API call failed: {str(e)}")
 		log_raw_llm_error("Stage 2: Primary Evaluator Agent", provider, url, e, docname=docname)
 
-	# Fallback heuristic evaluation if API fails
-	publish_stream_event(docname, user_email, "API connection issue. Running local heuristic evaluator...", progress=80)
-	res = run_heuristic_mock_evaluation(doc, draft_text)
-	log_raw_llm_response("Stage 2: Primary Evaluator Agent (Fallback Heuristic)", provider, 200, res, parsed_json=res, docname=docname)
-	return res
+	# Fallback to local heuristic evaluator on external API failure
+	publish_stream_event(docname, user_email, "External LLM API timed out. Running deterministic audit fallback...", progress=80)
+	fallback_res = run_heuristic_mock_evaluation(doc, draft_text)
+	log_raw_llm_response("Stage 2: Primary Evaluator Agent (Fallback Evaluation)", provider, 200, fallback_res, parsed_json=fallback_res, docname=docname)
+	return fallback_res
 
 
-
-def log_terminal_evaluation(stage_title, provider, url, payload, response_json, docname=None):
-	"""Prints formatted AI evaluation payload and response directly to the terminal stdout."""
-	border = "=" * 80
-	print(f"\n{border}", flush=True)
-	print(f"🎯 [AI COPILOT] {stage_title.upper()} | Deliverable: {docname or 'N/A'} | Provider: {provider}", flush=True)
-	print(f"🌐 Endpoint: {url}", flush=True)
-	print(f"{'-' * 80}", flush=True)
-	print("📤 [EVALUATION REQUEST PAYLOAD / PROMPT]:", flush=True)
-	try:
-		if isinstance(payload, (dict, list)):
-			print(json.dumps(payload, indent=2, ensure_ascii=False), flush=True)
-		else:
-			print(str(payload).strip(), flush=True)
-	except Exception:
-		print(str(payload).strip(), flush=True)
-
-	print(f"{'-' * 80}", flush=True)
-	print("📥 [EVALUATION SCORE & JSON RESPONSE]:", flush=True)
-	try:
-		if isinstance(response_json, (dict, list)):
-			print(json.dumps(response_json, indent=2, ensure_ascii=False), flush=True)
-		elif isinstance(response_json, str):
-			try:
-				parsed = json.loads(response_json)
-				print(json.dumps(parsed, indent=2, ensure_ascii=False), flush=True)
-			except Exception:
-				print(str(response_json).strip(), flush=True)
-		else:
-			print(str(response_json).strip(), flush=True)
-	except Exception:
-		print(str(response_json).strip(), flush=True)
-	print(f"{border}\n", flush=True)
-
-
-
-def publish_stream_event(docname, user_email, message, progress=0):
-	"""Publishes realtime evaluation updates to desk UI for all users viewing the deliverable."""
+def publish_stream_event(docname, user_email, message, progress=None):
+	"""Publishes progress events to Desk via frappe.publish_realtime."""
+	if not docname:
+		return
 	try:
 		frappe.publish_realtime(
-			event="ai_copilot_stream",
+			event="ai_copilot_progress",
 			message={
 				"docname": docname,
 				"message": message,
 				"progress": progress
-			}
+			},
+			user=user_email
 		)
 	except Exception:
 		pass
@@ -215,6 +192,7 @@ def publish_stream_event(docname, user_email, message, progress=0):
 
 def run_heuristic_mock_evaluation(doc, draft_text):
 	"""
+	Local, deterministic evaluation engine for offline, test, and fallback execution.
 	Evaluates content text length, key sections, and topic density.
 	"""
 	settings = frappe.get_single("Marketing Settings")
@@ -255,9 +233,12 @@ def run_heuristic_mock_evaluation(doc, draft_text):
 		]
 
 	strengths_md = "".join([f"- {s}\n" for s in strengths])
-	flaws_list = flaws or ["Content meets enterprise technical quality criteria for submission."]
-	flaws_md = "".join([f"- {fl}\n" for fl in flaws_list])
-	flaws_header = "#### Actionable Revision Items Required:" if flaws else "#### Copilot Recommendations:"
+	if flaws:
+		flaws_header = "#### Actionable Revision Items Required:"
+		flaws_md = "".join([f"- {fl}\n" for fl in flaws])
+	else:
+		flaws_header = "#### Actionable Revision Items:"
+		flaws_md = "- None required. Content meets all enterprise quality criteria for submission.\n"
 
 	feedback_md = f"""### AI Copilot Evaluation Summary
 - **Overall Score**: {score}%
@@ -305,7 +286,17 @@ def format_eval_result(res_json):
 		rationale = "\n".join([str(r) for r in rationale])
 
 	strengths_md = "".join([f"- {s}\n" for s in strengths]) if strengths else "- Clear structure and strong topic alignment.\n"
-	flaws_md = "".join([f"- {fl}\n" for fl in flaws]) if flaws else "- Content meets enterprise technical quality criteria for submission.\n"
+
+	if flaws:
+		flaws_header = "#### Recommended Improvements / Revision Items:"
+		flaws_md = "".join([f"- {fl}\n" for fl in flaws])
+	elif score >= passing_score:
+		flaws_header = "#### Actionable Revision Items:"
+		flaws_md = "- None required. Content meets all enterprise technical quality criteria for submission.\n"
+	else:
+		flaws_header = "#### Actionable Revision Items Required:"
+		flaws_md = f"- Additional technical depth and detail required to meet the minimum passing threshold ({passing_score}%).\n"
+
 	rationale_header = "#### Evaluator Rationale & Verdict:" if rationale else ""
 
 	feedback_text = f"""### AI Copilot Evaluation Report
@@ -315,7 +306,7 @@ def format_eval_result(res_json):
 #### Key Strengths Identified:
 {strengths_md}
 
-#### Recommended Improvements / Revision Items:
+{flaws_header}
 {flaws_md}
 
 {rationale_header}

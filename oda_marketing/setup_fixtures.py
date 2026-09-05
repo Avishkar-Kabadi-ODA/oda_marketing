@@ -34,7 +34,13 @@ def setup_content_item_options():
 		{"label": "Flowchart", "desc": "Visual diagram detailing processes, data flows, or workflows."},
 		{"label": "Carousel", "desc": "Multi-slide visual presentation or swipeable graphic summary."}
 	]
-	industry_domain_options = ["HCLS", "Pharma Supply Chain", "Fintech", "Agriculture", "Cross-domain"]
+	industry_domain_options = [
+		{"label": "HCLS", "desc": "Healthcare and Life Sciences domain, patient analytics, clinical trials, FDA regulatory compliance."},
+		{"label": "Pharma Supply Chain", "desc": "Pharmaceutical supply chain governance, serialization, cold-chain tracking, Good Distribution Practice."},
+		{"label": "Fintech", "desc": "Financial technologies, payments infrastructure, fraud prevention, banking compliance."},
+		{"label": "Agriculture", "desc": "Agri-tech, precision farming, crop monitoring, supply sustainability."},
+		{"label": "Cross-domain", "desc": "Cross-industry enterprise analytics, cloud infrastructure, AI architecture."}
+	]
 
 	for idx, f in enumerate(format_options):
 		if not frappe.db.exists("Content Item Option", f["label"]):
@@ -47,17 +53,22 @@ def setup_content_item_options():
 				"sort_order": idx
 			}).insert(ignore_permissions=True)
 			print(f"Created Content Item Option: Format - {f['label']}")
+		else:
+			frappe.db.set_value("Content Item Option", f["label"], "option_description", f["desc"])
 
-	for idx, label in enumerate(industry_domain_options):
-		if not frappe.db.exists("Content Item Option", label):
+	for idx, d in enumerate(industry_domain_options):
+		if not frappe.db.exists("Content Item Option", d["label"]):
 			frappe.get_doc({
 				"doctype": "Content Item Option",
 				"option_type": "Industry Domain",
-				"option_label": label,
+				"option_label": d["label"],
+				"option_description": d["desc"],
 				"is_active": 1,
 				"sort_order": idx
 			}).insert(ignore_permissions=True)
-			print(f"Created Content Item Option: Industry Domain - {label}")
+			print(f"Created Content Item Option: Industry Domain - {d['label']}")
+		else:
+			frappe.db.set_value("Content Item Option", d["label"], "option_description", d["desc"])
 
 
 def setup_email_templates_and_settings():
@@ -213,30 +224,30 @@ Your task is to analyze deliverable metadata and create a practical, fair System
 
 INPUT METADATA:
 - Deliverable Title: {title}
-- Content Type: {content_type} (Blog, Poll, Flowchart, Carousel)
-- Topic / Brief: {topic}
-- Practice Area / Domain: {practice_area}
+- Content Type / Format: {content_type}
+- Format Expectations: {format_description}
+- Description / Brief: {topic}
+- Industry Domain / Practice Area: {practice_area}
+- Domain Context & Guidelines: {domain_description}
 - Minimum Passing Threshold: 80%
 
 INSTRUCTIONS FOR GENERATING THE SYSTEM PROMPT:
 Construct a System Prompt instructing the Evaluator Agent to:
 1. Praise strong structure, clear domain terminology, engaging enterprise tone, and alignment with "{topic}".
-2. Evaluate technical relevance for {practice_area} and structure for {content_type}.
+2. Evaluate technical relevance for Industry Domain "{practice_area}" ({domain_description}) and format expectations for "{content_type}" ({format_description}).
 3. Award high passing scores (85%–98%) for complete, well-written enterprise deliverables.
 4. Only request revisions if content is missing, blank, or severely incomplete.
 
 Return raw System Prompt text only."""
 
 	settings.evaluator_default_prompt = """You are an encouraging AI Copilot & Technical Reviewer for Optimum Data Analytics (ODA).
-You are evaluating the {content_type} titled "{title}" in the domain of {practice_area}.
+You are evaluating the {content_type} ({format_description}) titled "{title}" in the domain of {practice_area} ({domain_description}).
 
 EVALUATION GUIDELINES FOR THIS DELIVERABLE:
 1. Praise strong structure, clear domain terminology ({practice_area}), and alignment with "{topic}".
-2. Award high passing scores (85%–98%) for complete, well-written, publishable enterprise content.
-3. Passing threshold is 80%."""
-
-	if settings.default_content_calendar and not frappe.db.exists("Content Calendar", settings.default_content_calendar):
-		settings.default_content_calendar = None
+2. Evaluate technical depth for {practice_area} and layout compliance for {content_type}.
+3. Award high passing scores (85%–98%) for complete, well-written, publishable enterprise content.
+4. Passing threshold is 80%."""
 
 	settings.save(ignore_permissions=True)
 	print("Initialized Marketing Settings with production defaults (Switches: 0, SLA Lead Days: 14).")
@@ -438,44 +449,6 @@ def setup_workspace_sidebar():
 	})
 	sidebar.insert(ignore_permissions=True)
 
-	frappe.db.delete("Custom DocPerm", {"parent": "Workspace Sidebar"})
-
-	frappe.get_doc({
-		"doctype": "Custom DocPerm",
-		"parent": "Workspace Sidebar",
-		"parenttype": "DocType",
-		"parentfield": "permissions",
-		"role": "System Manager",
-		"read": 1, "write": 1, "create": 1, "delete": 1
-	}).insert(ignore_permissions=True)
-
-	frappe.get_doc({
-		"doctype": "Custom DocPerm",
-		"parent": "Workspace Sidebar",
-		"parenttype": "DocType",
-		"parentfield": "permissions",
-		"role": "Marketing Lead",
-		"read": 1, "write": 1, "create": 1, "delete": 1
-	}).insert(ignore_permissions=True)
-
-	frappe.get_doc({
-		"doctype": "Custom DocPerm",
-		"parent": "Workspace Sidebar",
-		"parenttype": "DocType",
-		"parentfield": "permissions",
-		"role": "Desk User",
-		"read": 1, "write": 0, "create": 0, "delete": 0
-	}).insert(ignore_permissions=True)
-
-	frappe.get_doc({
-		"doctype": "Custom DocPerm",
-		"parent": "Workspace Sidebar",
-		"parenttype": "DocType",
-		"parentfield": "permissions",
-		"role": "All",
-		"read": 1, "write": 0, "create": 0, "delete": 0
-	}).insert(ignore_permissions=True)
-
 	frappe.clear_cache(doctype="Workspace Sidebar")
 	frappe.clear_cache(doctype="Workspace")
 
@@ -503,12 +476,155 @@ def setup_desktop_icon():
 		icon_doc.insert(ignore_permissions=True)
 
 
+def setup_content_item_dashboard():
+	"""Sets up native Dashboard Charts, Number Cards, and Dashboard for Content Item List Dashboard View."""
+	# 1. Setup Number Cards
+	cards_data = [
+		{
+			"label": "In Progress Drafts",
+			"function": "Count",
+			"document_type": "Content Item",
+			"filters_json": '[["Content Item","workflow_state","=","In Progress"]]',
+			"color": "#3B82F6"
+		},
+		{
+			"label": "In Technical Review",
+			"function": "Count",
+			"document_type": "Content Item",
+			"filters_json": '[["Content Item","workflow_state","=","In Review"]]',
+			"color": "#F59E0B"
+		},
+		{
+			"label": "Approved for Publishing",
+			"function": "Count",
+			"document_type": "Content Item",
+			"filters_json": '[["Content Item","workflow_state","=","Approved"]]',
+			"color": "#10B981"
+		},
+		{
+			"label": "Published Deliverables",
+			"function": "Count",
+			"document_type": "Content Item",
+			"filters_json": '[["Content Item","workflow_state","=","Published"]]',
+			"color": "#8B5CF6"
+		}
+	]
+
+	for card in cards_data:
+		if not frappe.db.exists("Number Card", card["label"]):
+			frappe.get_doc({
+				"doctype": "Number Card",
+				"name": card["label"],
+				"label": card["label"],
+				"document_type": card["document_type"],
+				"function": card["function"],
+				"filters_json": card["filters_json"],
+				"color": card["color"],
+				"is_public": 1,
+				"module": "ODA Marketing"
+			}).insert(ignore_permissions=True)
+			print(f"Created Number Card: {card['label']}")
+
+	# 2. Setup Dashboard Charts
+	charts_data = [
+		{
+			"chart_name": "Content Items by Workflow State",
+			"chart_type": "Group By",
+			"group_by_type": "Count",
+			"group_by_based_on": "workflow_state",
+			"document_type": "Content Item",
+			"type": "Donut",
+			"is_public": 1,
+			"module": "ODA Marketing"
+		},
+		{
+			"chart_name": "Content Items by Format",
+			"chart_type": "Group By",
+			"group_by_type": "Count",
+			"group_by_based_on": "content_type",
+			"document_type": "Content Item",
+			"type": "Donut",
+			"is_public": 1,
+			"module": "ODA Marketing"
+		},
+		{
+			"chart_name": "Deliverables by Publish Month",
+			"chart_type": "Count",
+			"based_on": "planned_publish_date",
+			"timespan": "Last Year",
+			"time_interval": "Monthly",
+			"document_type": "Content Item",
+			"type": "Bar",
+			"is_public": 1,
+			"module": "ODA Marketing"
+		},
+		{
+			"chart_name": "Content Items by Domain",
+			"chart_type": "Group By",
+			"group_by_type": "Count",
+			"group_by_based_on": "industry_domain",
+			"document_type": "Content Item",
+			"type": "Bar",
+			"is_public": 1,
+			"module": "ODA Marketing"
+		}
+	]
+
+	for chart in charts_data:
+		if not frappe.db.exists("Dashboard Chart", chart["chart_name"]):
+			frappe.get_doc({
+				"doctype": "Dashboard Chart",
+				"name": chart["chart_name"],
+				"chart_name": chart["chart_name"],
+				"chart_type": chart["chart_type"],
+				"group_by_type": chart.get("group_by_type"),
+				"group_by_based_on": chart.get("group_by_based_on"),
+				"based_on": chart.get("based_on"),
+				"timespan": chart.get("timespan"),
+				"time_interval": chart.get("time_interval"),
+				"document_type": chart["document_type"],
+				"type": chart["type"],
+				"filters_json": "[]",
+				"is_public": 1,
+				"module": "ODA Marketing"
+			}).insert(ignore_permissions=True)
+			print(f"Created Dashboard Chart: {chart['chart_name']}")
+
+	# 3. Setup Dashboard record for Content Item
+	dashboard_name = "Content Item"
+	if frappe.db.exists("Dashboard", dashboard_name):
+		frappe.delete_doc("Dashboard", dashboard_name, force=True, ignore_permissions=True)
+
+	dash = frappe.get_doc({
+		"doctype": "Dashboard",
+		"name": dashboard_name,
+		"dashboard_name": dashboard_name,
+		"module": "ODA Marketing",
+		"is_default": 1,
+		"cards": [
+			{"card": "In Progress Drafts"},
+			{"card": "In Technical Review"},
+			{"card": "Approved for Publishing"},
+			{"card": "Published Deliverables"}
+		],
+		"charts": [
+			{"chart": "Content Items by Workflow State", "width": "Half"},
+			{"chart": "Content Items by Format", "width": "Half"},
+			{"chart": "Deliverables by Publish Month", "width": "Half"},
+			{"chart": "Content Items by Domain", "width": "Half"}
+		]
+	})
+	dash.insert(ignore_permissions=True)
+	print(f"Created native Dashboard: {dashboard_name}")
+
+
 def run_setup():
 	setup_roles()
 	setup_content_item_options()
 	setup_email_templates_and_settings()
 	setup_workflow()
 	setup_kanban_board()
+	setup_content_item_dashboard()
 	setup_workspace_sidebar()
 	setup_desktop_icon()
 	frappe.db.commit()

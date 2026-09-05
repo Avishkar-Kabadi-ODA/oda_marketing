@@ -39,7 +39,6 @@ class MarketingOperationsDashboard {
 		}, 200));
 	}
 
-
 	setup_header_actions() {
 		this.page.set_secondary_action(__("Refresh"), () => {
 			this.fetch_data();
@@ -79,18 +78,23 @@ class MarketingOperationsDashboard {
 
 		this.wrapper.html(`
 			<div class="marketing-dashboard-wrapper">
-				<!-- Dedicated Responsive Filter Toolbar Card -->
+				<!-- Streamlined Theme-Aware Filter Card -->
 				<div class="dashboard-filter-card">
 					<div class="dashboard-filter-header">
-						<div style="display: flex; align-items: center; gap: 8px;">
-							<span style="font-weight: 700; color: #1E293B; font-size: 14px;">
-								<i class="octicon octicon-filter" style="color: #4F46E5; margin-right: 4px;"></i> Analytics Filter Controls
-							</span>
-							<span class="badge badge-light" id="active-filter-summary" style="font-size: 11px; color: #64748B;">All Records</span>
+						<div class="filter-header-left">
+							<div class="filter-header-icon">
+								<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+							</div>
+							<div>
+								<div class="filter-header-title">Filter Controls</div>
+								<div class="filter-header-subtitle">Slice deliverables across calendars, years, and formats</div>
+							</div>
+							<span class="active-filter-badge" id="active-filter-summary">All Records</span>
 						</div>
 						<div>
-							<button class="btn btn-xs btn-default" id="btn-reset-filters" style="font-weight: 600;">
-								<i class="octicon octicon-x"></i> Reset Filters
+							<button class="btn btn-xs btn-default btn-reset" id="btn-reset-filters">
+								<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -1px; margin-right: 3px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+								Reset Filters
 							</button>
 						</div>
 					</div>
@@ -99,7 +103,8 @@ class MarketingOperationsDashboard {
 						<!-- 1. Content Calendar Filter -->
 						<div class="filter-item">
 							<label class="filter-label">
-								<i class="octicon octicon-calendar"></i> Content Calendar
+								<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+								Content Calendar
 							</label>
 							<select class="filter-select" id="filter-calendar">
 								<option value="All">All Calendars</option>
@@ -109,7 +114,8 @@ class MarketingOperationsDashboard {
 						<!-- 2. Year Filter -->
 						<div class="filter-item">
 							<label class="filter-label">
-								<i class="octicon octicon-clock"></i> Year
+								<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+								Year
 							</label>
 							<select class="filter-select" id="filter-year">
 								${year_options_html}
@@ -119,7 +125,8 @@ class MarketingOperationsDashboard {
 						<!-- 3. Month / Period Filter -->
 						<div class="filter-item">
 							<label class="filter-label">
-								<i class="octicon octicon-milestone"></i> Month / Period
+								<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+								Month / Period
 							</label>
 							<select class="filter-select" id="filter-month">
 								${month_options_html}
@@ -129,119 +136,126 @@ class MarketingOperationsDashboard {
 						<!-- 4. Format Filter -->
 						<div class="filter-item">
 							<label class="filter-label">
-								<i class="octicon octicon-tag"></i> Format
+								<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+								Format
 							</label>
 							<select class="filter-select" id="filter-format">
 								<option value="All">All Formats</option>
 							</select>
 						</div>
-
-						<!-- 5. Industry Domain Filter -->
-						<div class="filter-item">
-							<label class="filter-label">
-								<i class="octicon octicon-globe"></i> Domain
-							</label>
-							<select class="filter-select" id="filter-domain">
-								<option value="All">All Domains</option>
-							</select>
-						</div>
-
-						<!-- 6. Risk Status Filter -->
-						<div class="filter-item">
-							<label class="filter-label">
-								<i class="octicon octicon-alert"></i> Risk Status
-							</label>
-							<select class="filter-select" id="filter-risk">
-								<option value="All">All Risk Levels</option>
-								<option value="On track">On track</option>
-								<option value="At risk">At risk</option>
-								<option value="Late">Late</option>
-							</select>
-						</div>
 					</div>
 				</div>
 
-				<!-- Responsive KPI Cards Grid -->
+				<!-- Premium 4-Card Summary KPI Grid (Theme Adaptive) -->
 				<div class="kpi-grid">
-					<div class="kpi-box" data-state="">
-						<div class="kpi-title" style="color: #4F46E5;">Total Deliverables</div>
+					<!-- 1. Total Deliverables -->
+					<div class="kpi-box kpi-total" data-state="">
+						<div class="kpi-top-row">
+							<span class="kpi-title">Total Deliverables</span>
+							<div class="kpi-icon-badge kpi-badge-indigo">
+								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+							</div>
+						</div>
 						<div class="kpi-value" id="kpi-total">0</div>
-						<div class="kpi-subtitle">In current scope</div>
+						<div class="kpi-subtitle">
+							<span class="kpi-dot dot-indigo"></span> In current scope
+						</div>
 					</div>
-					<div class="kpi-box" data-state="Planned">
-						<div class="kpi-title" style="color: #64748B;">Planned</div>
-						<div class="kpi-value" id="kpi-planned" style="color: #475569;">0</div>
-						<div class="kpi-subtitle">Not yet briefed</div>
+
+					<!-- 2. In Progress -->
+					<div class="kpi-box kpi-in-progress" data-state="In Progress">
+						<div class="kpi-top-row">
+							<span class="kpi-title">In Progress</span>
+							<div class="kpi-icon-badge kpi-badge-orange">
+								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+							</div>
+						</div>
+						<div class="kpi-value" id="kpi-in-progress">0</div>
+						<div class="kpi-subtitle">
+							<span class="kpi-dot dot-orange"></span> Active drafting & research
+						</div>
 					</div>
-					<div class="kpi-box" data-state="Briefed">
-						<div class="kpi-title" style="color: #2563EB;">Briefed</div>
-						<div class="kpi-value" id="kpi-briefed" style="color: #1D4ED8;">0</div>
-						<div class="kpi-subtitle">Ready to start</div>
+
+					<!-- 3. Approved for Publishing -->
+					<div class="kpi-box kpi-approved" data-state="Approved">
+						<div class="kpi-top-row">
+							<span class="kpi-title">Approved</span>
+							<div class="kpi-icon-badge kpi-badge-cyan">
+								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+							</div>
+						</div>
+						<div class="kpi-value" id="kpi-approved">0</div>
+						<div class="kpi-subtitle">
+							<span class="kpi-dot dot-cyan"></span> Ready for publishing
+						</div>
 					</div>
-					<div class="kpi-box" data-state="In Progress">
-						<div class="kpi-title" style="color: #EA580C;">In Progress</div>
-						<div class="kpi-value" id="kpi-in-progress" style="color: #C2410C;">0</div>
-						<div class="kpi-subtitle">Active drafting</div>
-					</div>
-					<div class="kpi-box" data-state="In Review">
-						<div class="kpi-title" style="color: #CA8A04;">In Review</div>
-						<div class="kpi-value" id="kpi-in-review" style="color: #A16207;">0</div>
-						<div class="kpi-subtitle">Pending approval</div>
-					</div>
-					<div class="kpi-box" data-state="In Revision">
-						<div class="kpi-title" style="color: #DC2626;">In Revision</div>
-						<div class="kpi-value" id="kpi-in-revision" style="color: #B91C1C;">0</div>
-						<div class="kpi-subtitle">Changes requested</div>
-					</div>
-					<div class="kpi-box" data-state="Approved">
-						<div class="kpi-title" style="color: #0891B2;">Approved</div>
-						<div class="kpi-value" id="kpi-approved" style="color: #0E7490;">0</div>
-						<div class="kpi-subtitle">Ready to publish</div>
-					</div>
-					<div class="kpi-box" data-state="Published">
-						<div class="kpi-title" style="color: #059669;">Published</div>
-						<div class="kpi-value" id="kpi-published" style="color: #047857;">0</div>
-						<div class="kpi-subtitle">Live on channels</div>
-					</div>
-					<div class="kpi-box" data-risk="Late">
-						<div class="kpi-title" style="color: #BE123C;">Late Risk</div>
-						<div class="kpi-value" id="kpi-late" style="color: #BE123C;">0</div>
-						<div class="kpi-subtitle">Past SLA due date</div>
-					</div>
-					<div class="kpi-box">
-						<div class="kpi-title" style="color: #7E22CE;">AI Quality Score</div>
-						<div class="kpi-value" id="kpi-ai-score" style="color: #7E22CE;">--</div>
-						<div class="kpi-subtitle">Average score</div>
+
+					<!-- 4. Published Live -->
+					<div class="kpi-box kpi-published" data-state="Published">
+						<div class="kpi-top-row">
+							<span class="kpi-title">Published</span>
+							<div class="kpi-icon-badge kpi-badge-emerald">
+								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+							</div>
+						</div>
+						<div class="kpi-value" id="kpi-published">0</div>
+						<div class="kpi-subtitle">
+							<span class="kpi-dot dot-emerald"></span> Live across channels
+						</div>
 					</div>
 				</div>
 
-				<!-- Responsive Visual Charts Grid -->
+				<!-- Responsive Visual Charts Grid (Theme Adaptive) -->
 				<div class="charts-grid">
 					<div class="chart-card">
-						<div class="chart-card-title">
-							<i class="octicon octicon-pulse" style="color: #4F46E5;"></i> Workflow Pipeline Funnel
+						<div class="chart-card-header">
+							<div class="chart-card-icon-wrap" style="background: rgba(79, 70, 229, 0.12); color: #4F46E5;">
+								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+							</div>
+							<div>
+								<div class="chart-card-title">Workflow Pipeline Funnel</div>
+								<div class="chart-card-subtitle">Distribution of deliverables across lifecycle stages</div>
+							</div>
 						</div>
 						<div id="chart-status-funnel" class="chart-container"></div>
 						<div id="funnel-custom-legend" class="dashboard-custom-legend"></div>
 					</div>
 
 					<div class="chart-card">
-						<div class="chart-card-title">
-							<i class="octicon octicon-graph" style="color: #6366F1;"></i> Monthly Publication Cadence
+						<div class="chart-card-header">
+							<div class="chart-card-icon-wrap" style="background: rgba(99, 102, 241, 0.12); color: #6366F1;">
+								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+							</div>
+							<div>
+								<div class="chart-card-title">Monthly Publication Cadence</div>
+								<div class="chart-card-subtitle">Planned deliverable output volume by month</div>
+							</div>
 						</div>
 						<div id="chart-monthly-cadence" class="chart-container"></div>
 					</div>
 
 					<div class="chart-card">
-						<div class="chart-card-title">
-							<i class="octicon octicon-tag" style="color: #8B5CF6;"></i> Content Format Distribution
+						<div class="chart-card-header">
+							<div class="chart-card-icon-wrap" style="background: rgba(139, 92, 246, 0.12); color: #8B5CF6;">
+								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+							</div>
+							<div>
+								<div class="chart-card-title">Content Format Distribution</div>
+								<div class="chart-card-subtitle">Omnichannel mix of blogs, carousels, and polls</div>
+							</div>
 						</div>
 						<div id="chart-format-mix" class="chart-container"></div>
 					</div>
 
 					<div class="chart-card">
-						<div class="chart-card-title">
-							<i class="octicon octicon-globe" style="color: #0EA5E9;"></i> Industry Domain Breakdown
+						<div class="chart-card-header">
+							<div class="chart-card-icon-wrap" style="background: rgba(14, 165, 233, 0.12); color: #0EA5E9;">
+								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+							</div>
+							<div>
+								<div class="chart-card-title">Industry Domain Breakdown</div>
+								<div class="chart-card-subtitle">Deliverables across target practice areas</div>
+							</div>
 						</div>
 						<div id="chart-domain-breakdown" class="chart-container"></div>
 					</div>
@@ -252,11 +266,8 @@ class MarketingOperationsDashboard {
 		// KPI Card Click Navigation
 		this.wrapper.find(".kpi-box").on("click", function() {
 			const state = $(this).data("state");
-			const risk = $(this).data("risk");
 			if (state) {
 				frappe.set_route("List", "Content Item", { workflow_state: state });
-			} else if (risk) {
-				frappe.set_route("List", "Content Item", { risk_flag: risk });
 			} else {
 				frappe.set_route("List", "Content Item");
 			}
@@ -278,8 +289,6 @@ class MarketingOperationsDashboard {
 			me.wrapper.find("#filter-year").val(String(current_year));
 			me.wrapper.find("#filter-month").val("0");
 			me.wrapper.find("#filter-format").val("All");
-			me.wrapper.find("#filter-domain").val("All");
-			me.wrapper.find("#filter-risk").val("All");
 			me.fetch_data();
 		});
 	}
@@ -290,8 +299,6 @@ class MarketingOperationsDashboard {
 		const year = this.wrapper.find("#filter-year").val() || String(new Date().getFullYear());
 		const month = this.wrapper.find("#filter-month").val() || "0";
 		const format = this.wrapper.find("#filter-format").val() || "All";
-		const domain = this.wrapper.find("#filter-domain").val() || "All";
-		const risk = this.wrapper.find("#filter-risk").val() || "All";
 
 		frappe.call({
 			method: "oda_marketing.oda_marketing.doctype.content_item.content_item.get_dashboard_metrics",
@@ -299,9 +306,7 @@ class MarketingOperationsDashboard {
 				calendar: cal,
 				year: year,
 				month: month,
-				format: format,
-				domain: domain,
-				risk: risk
+				format: format
 			},
 			callback(res) {
 				if (res && res.message) {
@@ -313,7 +318,7 @@ class MarketingOperationsDashboard {
 					}
 					me.render_kpis(data.kpis || {});
 					me.render_charts(data);
-					me.update_summary_label(cal, year, month, format, domain, risk);
+					me.update_summary_label(cal, year, month, format);
 				}
 			}
 		});
@@ -341,20 +346,9 @@ class MarketingOperationsDashboard {
 			});
 			if (cur_val) $fmt.val(cur_val);
 		}
-
-		// Populate Domains
-		if (data.domains && data.domains.length > 0) {
-			const $dom = this.wrapper.find("#filter-domain");
-			const cur_val = $dom.val();
-			$dom.empty().append(`<option value="All">All Domains</option>`);
-			data.domains.forEach(d => {
-				$dom.append(`<option value="${d}">${d}</option>`);
-			});
-			if (cur_val) $dom.val(cur_val);
-		}
 	}
 
-	update_summary_label(cal, year, month, format, domain, risk) {
+	update_summary_label(cal, year, month, format) {
 		let parts = [];
 		if (cal !== "All") parts.push(cal);
 		if (year !== "All") parts.push(year);
@@ -363,8 +357,6 @@ class MarketingOperationsDashboard {
 			parts.push(month_names[parseInt(month)] || `M${month}`);
 		}
 		if (format !== "All") parts.push(format);
-		if (domain !== "All") parts.push(domain);
-		if (risk !== "All") parts.push(risk);
 
 		const summary_text = parts.length > 0 ? parts.join(" • ") : "All Records";
 		this.wrapper.find("#active-filter-summary").text(summary_text);
@@ -372,20 +364,9 @@ class MarketingOperationsDashboard {
 
 	render_kpis(kpis) {
 		this.wrapper.find("#kpi-total").text(kpis.total || 0);
-		this.wrapper.find("#kpi-planned").text(kpis.planned || 0);
-		this.wrapper.find("#kpi-briefed").text(kpis.briefed || 0);
 		this.wrapper.find("#kpi-in-progress").text(kpis.in_progress || 0);
-		this.wrapper.find("#kpi-in-review").text(kpis.in_review || 0);
-		this.wrapper.find("#kpi-in-revision").text(kpis.in_revision || 0);
 		this.wrapper.find("#kpi-approved").text(kpis.approved || 0);
 		this.wrapper.find("#kpi-published").text(kpis.published || 0);
-		this.wrapper.find("#kpi-late").text(kpis.late_risk || 0);
-
-		if (kpis.avg_ai_score && kpis.avg_ai_score > 0) {
-			this.wrapper.find("#kpi-ai-score").text(`${kpis.avg_ai_score}%`);
-		} else {
-			this.wrapper.find("#kpi-ai-score").text("--");
-		}
 	}
 
 	render_charts(data) {

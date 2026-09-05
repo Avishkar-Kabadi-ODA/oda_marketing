@@ -28,8 +28,21 @@ frappe.ui.form.on("Marketing Settings", {
 			"subagent_meta_prompt",
 			"evaluator_default_prompt"
 		];
+		const required_ai_fields = [
+			"ai_copilot_passing_score",
+			"max_writer_copilot_reviews_per_item",
+			"max_reviewer_copilot_reviews_per_item",
+			"ai_provider",
+			"ai_api_key_var",
+			"ai_endpoint_var",
+			"ai_model_name",
+			"subagent_meta_prompt",
+			"evaluator_default_prompt"
+		];
 		ai_fields.forEach(field => {
 			frm.set_df_property(field, "hidden", enabled ? 0 : 1);
+		});
+		required_ai_fields.forEach(field => {
 			frm.set_df_property(field, "reqd", enabled ? 1 : 0);
 		});
 	}

@@ -880,13 +880,10 @@ def import_content_items_from_excel(file_url=None, default_calendar=None):
 	if not os.path.exists(file_path):
 		frappe.throw(_("File not found on server at {0}").format(file_path), frappe.DoesNotExistError)
 
-	# Determine default calendar fallback
-	if not default_calendar:
-		settings = frappe.get_single("Marketing Settings")
-		default_calendar = getattr(settings, "default_content_calendar", None)
-		if not default_calendar or not frappe.db.exists("Content Calendar", default_calendar):
-			active_cals = frappe.get_all("Content Calendar", filters={"status": "Active"}, limit=1, pluck="name")
-			default_calendar = active_cals[0] if active_cals else None
+	# Determine default calendar fallback from import dialog parameter or first active calendar
+	if not default_calendar or not frappe.db.exists("Content Calendar", default_calendar):
+		active_cals = frappe.get_all("Content Calendar", filters={"status": "Active"}, limit=1, pluck="name")
+		default_calendar = active_cals[0] if active_cals else None
 
 	rows_data = []
 
@@ -1262,6 +1259,14 @@ def trigger_ai_copilot(docname):
 			frappe.ValidationError
 		)
 
+	# Validate that at least one Markdown document is attached for Copilot evaluation
+	from oda_marketing.oda_marketing.ai_engine.file_extractor import has_markdown_attachment
+	if not has_markdown_attachment(doc):
+		frappe.throw(
+			_("<b>AI Copilot Review requires a Markdown file (.md or .markdown)</b> attached as a deliverable draft to evaluate content copy."),
+			frappe.ValidationError
+		)
+
 	# Check usage limit for Writer
 	max_reviews = int(getattr(settings, "max_writer_copilot_reviews_per_item", 2) or 2)
 	current_count = len([r for r in (doc.ai_reviews or []) if r.get("review_type") == "Writer"])
@@ -1322,6 +1327,14 @@ def trigger_reviewer_copilot(docname, instructions=None):
 	if not (doc.content_file_1 or "").strip():
 		frappe.throw(
 			_("<b>Primary Content Draft</b> is mandatory to run AI Copilot Review. Please attach a draft file first."),
+			frappe.ValidationError
+		)
+
+	# Validate that at least one Markdown document is attached for Copilot evaluation
+	from oda_marketing.oda_marketing.ai_engine.file_extractor import has_markdown_attachment
+	if not has_markdown_attachment(doc):
+		frappe.throw(
+			_("<b>AI Copilot Review requires a Markdown file (.md or .markdown)</b> attached as a deliverable draft to evaluate content copy."),
 			frappe.ValidationError
 		)
 

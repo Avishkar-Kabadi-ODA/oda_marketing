@@ -227,10 +227,6 @@ frappe.ui.form.on("Content Item", {
 				"reviewer_technical", "published_url", "risk_flag"
 			];
 			metadata_fields.forEach(field => frm.set_df_property(field, "read_only", 1));
-
-			setTimeout(() => {
-				$("a:contains('Edit Sidebar'), .sidebar-item-container:contains('Edit Sidebar')").hide();
-			}, 300);
 		}
 
 		// Writer read-only enforcement before In Progress state

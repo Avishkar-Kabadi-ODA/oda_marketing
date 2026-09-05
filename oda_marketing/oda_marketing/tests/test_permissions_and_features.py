@@ -472,10 +472,12 @@ class TestPermissionsAndFeatures(FrappeTestCase):
 		self.assertRaises(frappe.ValidationError, item.save)
 
 		# 2. Attaching DOCX -> should throw ValidationError
+		item.reload()
 		item.content_file_1 = "/files/sample_draft.docx"
 		self.assertRaises(frappe.ValidationError, item.save)
 
 		# 3. Attaching Markdown file (.md) -> should succeed
+		item.reload()
 		item.content_file_1 = "/files/sample_draft.md"
 		item.save()
 		self.assertEqual(item.content_file_1, "/files/sample_draft.md")

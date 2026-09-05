@@ -2,12 +2,19 @@
 # For license information, please see license.txt
 
 import unittest
+import os
+import tempfile
 import frappe
 from oda_marketing.oda_marketing.ai_engine.key_manager import get_secret
-from oda_marketing.oda_marketing.ai_engine.file_extractor import extract_file_content, get_combined_draft_text
+from oda_marketing.oda_marketing.ai_engine.file_extractor import (
+	extract_file_content,
+	get_combined_draft_text,
+	has_markdown_attachment
+)
 from oda_marketing.oda_marketing.ai_engine.prompt_subagent import generate_dynamic_system_prompt
 from oda_marketing.oda_marketing.ai_engine.evaluator_agent import evaluate_content_item
 from oda_marketing.oda_marketing.ai_engine.runner import run_ai_review
+from oda_marketing.oda_marketing.doctype.content_item.content_item import trigger_ai_copilot, get_ai_copilot_status
 from oda_marketing.tests.test_demo_script import create_unit_test_users
 
 
@@ -80,6 +87,7 @@ class TestAIAgentEngine(unittest.TestCase):
 				}).insert(ignore_permissions=True)
 
 		frappe.db.set_single_value("Marketing Settings", "enable_ai_copilot", 1)
+		frappe.db.set_single_value("Marketing Settings", "ai_provider", "Custom")
 		frappe.db.set_single_value("Marketing Settings", "ai_copilot_passing_score", 80)
 		frappe.db.set_single_value("Marketing Settings", "max_writer_copilot_reviews_per_item", 2)
 		if hasattr(frappe.local, "single_docs"):
@@ -132,7 +140,7 @@ class TestAIAgentEngine(unittest.TestCase):
 		item = _create_test_item({
 			"title": "Low Score Test Draft",
 			"industry_domain": "Fintech",
-			"content_file_1": "/files/sample_draft.txt",
+			"content_file_1": "/files/sample_draft.md",
 			"ai_score": 50,
 			"ai_review_status": "Completed",
 		})
@@ -153,7 +161,7 @@ class TestAIAgentEngine(unittest.TestCase):
 		item = _create_test_item({
 			"title": "Enterprise Cloud Migration Blueprint",
 			"description": "Step by step cloud migration guide for enterprise infrastructure.",
-			"content_file_1": "/files/sample_draft.txt",
+			"content_file_1": "/files/sample_draft.md",
 			"notes": "<p>Detailed cloud architecture document covering multi-cloud failover, Terraform automation, zero-trust network access, and cost governance.</p>",
 		})
 
@@ -186,7 +194,7 @@ class TestAIAgentEngine(unittest.TestCase):
 		item = _create_test_item({
 			"title": "Limit Test Item",
 			"industry_domain": "Fintech",
-			"content_file_1": "/files/sample_draft.txt",
+			"content_file_1": "/files/sample_draft.md",
 		})
 
 		# Force item into Marketing Copilot Review state
@@ -211,6 +219,57 @@ class TestAIAgentEngine(unittest.TestCase):
 				"title": "Overlimit Item",
 				"description": long_topic,
 			})
+
+	def test_has_markdown_attachment_helper(self):
+		"""Tests detection of markdown attachment in content_file fields."""
+		item_no_md = _create_test_item({
+			"title": "Image Only Item",
+			"content_file_1": "/files/flowchart.png",
+			"content_file_2": "/files/diagram.svg",
+		})
+		self.assertFalse(has_markdown_attachment(item_no_md))
+
+		item_with_md = _create_test_item({
+			"title": "Markdown Item",
+			"content_file_1": "/files/post.md",
+			"content_file_2": "/files/diagram.png",
+		})
+		self.assertTrue(has_markdown_attachment(item_with_md))
+
+	def test_copilot_trigger_requires_markdown_file(self):
+		"""Tests that trigger_ai_copilot raises ValidationError if no Markdown attachment exists."""
+		frappe.set_user("Administrator")
+		item_image_only = _create_test_item({
+			"title": "Image Only Deliverable",
+			"content_file_1": "/files/graphic.png",
+			"content_file_2": "/files/hero.jpg",
+		})
+		_set_workflow_state(item_image_only, "In Progress")
+
+		with self.assertRaises(frappe.ValidationError) as ctx:
+			trigger_ai_copilot(item_image_only.name)
+		self.assertIn("Markdown file", str(ctx.exception))
+
+	def test_image_attachments_handled_as_clean_references(self):
+		"""Tests that image attachments are noted as visual asset references without bloating draft text."""
+		item = _create_test_item({
+			"title": "Mixed Deliverable",
+			"content_file_1": "/files/article.md",
+			"content_file_2": "/files/screenshot.png",
+		})
+		draft_text = get_combined_draft_text(item)
+		self.assertIn("Image Attachment: screenshot.png", draft_text)
+
+	def test_get_ai_copilot_status_api(self):
+		"""Tests get_ai_copilot_status returns valid copilot configuration without permissions error."""
+		frappe.db.set_single_value("Marketing Settings", "enable_ai_copilot", 1)
+		status = get_ai_copilot_status()
+		self.assertEqual(status["enable_ai_copilot"], 1)
+		self.assertEqual(status["max_writer_copilot_reviews_per_item"], 2)
+
+		frappe.db.set_single_value("Marketing Settings", "enable_ai_copilot", 0)
+		status = get_ai_copilot_status()
+		self.assertEqual(status["enable_ai_copilot"], 0)
 
 	def tearDown(self):
 		frappe.db.rollback()

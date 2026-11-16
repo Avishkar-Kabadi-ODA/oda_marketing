@@ -19,8 +19,6 @@ def setup_roles():
 			role_doc.insert(ignore_permissions=True)
 			print(f"Created Role: {r['role_name']}")
 
-	# Remove any stale Custom DocPerms so the standard DocPerms from doctype JSON definitions take effect
-	frappe.db.delete("Custom DocPerm", {"parent": ["in", ["Content Item", "Content Calendar", "Content Item Option"]]})
 	frappe.clear_cache(doctype="Content Item")
 	frappe.clear_cache(doctype="Content Calendar")
 	frappe.clear_cache(doctype="Content Item Option")
@@ -53,8 +51,6 @@ def setup_content_item_options():
 				"sort_order": idx
 			}).insert(ignore_permissions=True)
 			print(f"Created Content Item Option: Format - {f['label']}")
-		else:
-			frappe.db.set_value("Content Item Option", f["label"], "option_description", f["desc"])
 
 	for idx, d in enumerate(industry_domain_options):
 		if not frappe.db.exists("Content Item Option", d["label"]):
@@ -67,8 +63,6 @@ def setup_content_item_options():
 				"sort_order": idx
 			}).insert(ignore_permissions=True)
 			print(f"Created Content Item Option: Industry Domain - {d['label']}")
-		else:
-			frappe.db.set_value("Content Item Option", d["label"], "option_description", d["desc"])
 
 
 def setup_email_templates_and_settings():
@@ -187,12 +181,7 @@ def setup_email_templates_and_settings():
 	]
 
 	for t in templates:
-		if frappe.db.exists("Email Template", t["name"]):
-			et = frappe.get_doc("Email Template", t["name"])
-			et.subject = t["subject"]
-			et.response = t["response"]
-			et.save(ignore_permissions=True)
-		else:
+		if not frappe.db.exists("Email Template", t["name"]):
 			et = frappe.get_doc({
 				"doctype": "Email Template",
 				"name": t["name"],
@@ -203,23 +192,28 @@ def setup_email_templates_and_settings():
 			et.insert(ignore_permissions=True)
 			print(f"Created/Updated Email Template: {t['name']}")
 
-	# Initial Setup Defaults: Keep optional features (email notifications & AI copilot) disabled by default
-	# to allow clean installation without requiring pre-configured publisher/API settings.
+	# Fill only unset settings so migrations never overwrite administrator configuration.
 	settings = frappe.get_single("Marketing Settings")
-	if not getattr(settings, "overdue_email_template", None):
-		settings.writer_email_template = "Marketing Writer Notification"
-		settings.reviewer_email_template = "Marketing Reviewer Notification"
-		settings.publisher_email_template = "Marketing Publisher Notification"
-		settings.published_email_template = "Marketing Published Notification"
-		settings.overdue_email_template = "Marketing Overdue Alert"
-		settings.business_hours_start = 9
-		settings.business_hours_end = 19
-		settings.sla_reminder_days_before = 3
-		settings.max_writer_copilot_reviews_per_item = 2
-		settings.max_reviewer_copilot_reviews_per_item = 2
-		settings.save(ignore_permissions=True)
+	settings_changed = False
+	defaults = {
+		"writer_email_template": "Marketing Writer Notification",
+		"reviewer_email_template": "Marketing Reviewer Notification",
+		"publisher_email_template": "Marketing Publisher Notification",
+		"published_email_template": "Marketing Published Notification",
+		"overdue_email_template": "Marketing Overdue Alert",
+		"business_hours_start": 9,
+		"business_hours_end": 19,
+		"sla_reminder_days_before": 3,
+		"max_writer_copilot_reviews_per_item": 2,
+		"max_reviewer_copilot_reviews_per_item": 2,
+	}
+	for fieldname, value in defaults.items():
+		if getattr(settings, fieldname, None) is None:
+			settings.set(fieldname, value)
+			settings_changed = True
 
-	settings.subagent_meta_prompt = """You are a constructive AI Copilot & Enterprise Marketing Auditor for Optimum Data Analytics (ODA).
+	if getattr(settings, "subagent_meta_prompt", None) is None:
+		settings.subagent_meta_prompt = """You are a constructive AI Copilot & Enterprise Marketing Auditor for Optimum Data Analytics (ODA).
 Your task is to analyze deliverable metadata and create a practical, fair System Prompt for evaluating the document.
 
 INPUT METADATA:
@@ -229,27 +223,32 @@ INPUT METADATA:
 - Description / Brief: {topic}
 - Industry Domain / Practice Area: {practice_area}
 - Domain Context & Guidelines: {domain_description}
-- Minimum Passing Threshold: 80%
+- Minimum Passing Threshold: {passing_score}%
 
 INSTRUCTIONS FOR GENERATING THE SYSTEM PROMPT:
 Construct a System Prompt instructing the Evaluator Agent to:
 1. Praise strong structure, clear domain terminology, engaging enterprise tone, and alignment with "{topic}".
 2. Evaluate technical relevance for Industry Domain "{practice_area}" ({domain_description}) and format expectations for "{content_type}" ({format_description}).
-3. Award high passing scores (85%–98%) for complete, well-written enterprise deliverables.
-4. Only request revisions if content is missing, blank, or severely incomplete.
+3. Score each criterion based on evidence in the draft; do not assume or target a particular score.
+4. Apply the configured passing threshold without changing workflow state or treating the score as an approval.
+5. Request revisions for any material factual, technical, structural, or brief-alignment gaps.
 
 Return raw System Prompt text only."""
+		settings_changed = True
 
-	settings.evaluator_default_prompt = """You are an encouraging AI Copilot & Technical Reviewer for Optimum Data Analytics (ODA).
+	if getattr(settings, "evaluator_default_prompt", None) is None:
+		settings.evaluator_default_prompt = """You are an encouraging AI Copilot & Technical Reviewer for Optimum Data Analytics (ODA).
 You are evaluating the {content_type} ({format_description}) titled "{title}" in the domain of {practice_area} ({domain_description}).
 
 EVALUATION GUIDELINES FOR THIS DELIVERABLE:
 1. Praise strong structure, clear domain terminology ({practice_area}), and alignment with "{topic}".
 2. Evaluate technical depth for {practice_area} and layout compliance for {content_type}.
-3. Award high passing scores (85%–98%) for complete, well-written, publishable enterprise content.
-4. Passing threshold is 80%."""
+3. Score each criterion based on evidence in the draft; do not assume or target a particular score.
+4. Passing threshold is {passing_score}%. The score is informational and must not approve or route the item."""
+		settings_changed = True
 
-	settings.save(ignore_permissions=True)
+	if settings_changed:
+		settings.save(ignore_permissions=True)
 	print("Initialized Marketing Settings with production defaults (Switches: 0, SLA Lead Days: 14).")
 
 
@@ -286,7 +285,7 @@ def setup_workflow():
 
 	workflow_name = "Content Item Workflow"
 	if frappe.db.exists("Workflow", workflow_name):
-		frappe.delete_doc("Workflow", workflow_name, force=True, ignore_permissions=True)
+		return
 
 	states = [
 		{"state": "Planned", "doc_status": "0", "allow_edit": "Marketing Lead", "style": "Primary"},
@@ -326,6 +325,7 @@ def setup_workflow():
 		# Approved -> Published (Lead/Publisher only)
 		{"state": "Approved", "action": "Publish", "next_state": "Published", "allowed": "Marketing Lead"},
 		{"state": "Approved", "action": "Publish", "next_state": "Published", "allowed": "System Manager"},
+		{"state": "Approved", "action": "Publish", "next_state": "Published", "allowed": "Desk User"},
 	]
 
 	wf = frappe.get_doc({
@@ -345,7 +345,7 @@ def setup_workflow():
 def setup_kanban_board():
 	board_name = "Content Pipeline"
 	if frappe.db.exists("Kanban Board", board_name):
-		frappe.delete_doc("Kanban Board", board_name, force=True, ignore_permissions=True)
+		return
 
 	columns = [
 		{"column_name": "Planned", "status": "Active", "indicator": "Gray"},
@@ -373,8 +373,7 @@ def setup_kanban_board():
 def setup_workspace_sidebar():
 	sidebar_name = "ODA Marketing"
 	if frappe.db.exists("Workspace Sidebar", sidebar_name):
-		frappe.delete_doc("Workspace Sidebar", sidebar_name, force=True, ignore_permissions=True)
-	frappe.db.delete("Workspace Sidebar Item", {"parent": sidebar_name})
+		return
 
 	items = [
 		{
@@ -454,26 +453,19 @@ def setup_workspace_sidebar():
 
 
 def setup_desktop_icon():
-	if frappe.db.exists("Desktop Icon", "ODA Marketing Copilot"):
-		frappe.delete_doc("Desktop Icon", "ODA Marketing Copilot", force=True, ignore_permissions=True)
-
 	if frappe.db.exists("Desktop Icon", "ODA Marketing"):
-		icon_doc = frappe.get_doc("Desktop Icon", "ODA Marketing")
-		icon_doc.label = "ODA Marketing"
-		icon_doc.logo_url = "/assets/oda_marketing/images/oda_logo.svg"
-		icon_doc.save(ignore_permissions=True)
-	else:
-		icon_doc = frappe.get_doc({
-			"doctype": "Desktop Icon",
-			"name": "ODA Marketing",
-			"label": "ODA Marketing",
-			"app": "oda_marketing",
-			"logo_url": "/assets/oda_marketing/images/oda_logo.svg",
-			"standard": 1,
-			"icon_type": "App",
-			"link": "/app/oda-marketing"
-		})
-		icon_doc.insert(ignore_permissions=True)
+		return
+	icon_doc = frappe.get_doc({
+		"doctype": "Desktop Icon",
+		"name": "ODA Marketing",
+		"label": "ODA Marketing",
+		"app": "oda_marketing",
+		"logo_url": "/assets/oda_marketing/images/oda_logo.svg",
+		"standard": 1,
+		"icon_type": "App",
+		"link": "/app/oda-marketing"
+	})
+	icon_doc.insert(ignore_permissions=True)
 
 
 def setup_content_item_dashboard():
@@ -593,7 +585,7 @@ def setup_content_item_dashboard():
 	# 3. Setup Dashboard record for Content Item
 	dashboard_name = "Content Item"
 	if frappe.db.exists("Dashboard", dashboard_name):
-		frappe.delete_doc("Dashboard", dashboard_name, force=True, ignore_permissions=True)
+		return
 
 	dash = frappe.get_doc({
 		"doctype": "Dashboard",
@@ -627,4 +619,3 @@ def run_setup():
 	setup_content_item_dashboard()
 	setup_workspace_sidebar()
 	setup_desktop_icon()
-	frappe.db.commit()

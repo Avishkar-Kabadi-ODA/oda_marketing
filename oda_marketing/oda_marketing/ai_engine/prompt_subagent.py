@@ -1,13 +1,20 @@
 # Copyright (c) 2026, Optimum Data Analytics and contributors
 # For license information, please see license.txt
 
-import json
-import urllib.request
-import urllib.error
-import frappe
-from oda_marketing.oda_marketing.ai_engine.key_manager import get_llm_config
-from oda_marketing.oda_marketing.ai_engine.logger import log_raw_llm_request, log_raw_llm_response, log_raw_llm_error
+import time
 
+import frappe
+from pydantic_ai import Agent
+
+from oda_marketing.oda_marketing.ai_engine.agent_factory import build_model, build_model_settings
+from oda_marketing.oda_marketing.ai_engine.ai_log import log_llm_event
+from oda_marketing.oda_marketing.ai_engine.key_manager import get_llm_config
+
+STAGE = "prompt_generator"
+SUBAGENT_SYSTEM_PROMPT = "You are a prompt generator subagent."
+MAX_OUTPUT_TOKENS = 2048
+MIN_PROMPT_CHARS = 50
+OUTPUT_RETRIES = 1
 
 SUBAGENT_META_PROMPT = """You are a constructive AI Copilot & Enterprise Marketing Auditor for Optimum Data Analytics (ODA).
 Your task is to analyze deliverable metadata and create a practical, fair System Prompt for evaluating the document.
@@ -19,228 +26,148 @@ INPUT METADATA:
 - Description / Brief: {topic}
 - Industry Domain / Practice Area: {practice_area}
 - Domain Context & Guidelines: {domain_description}
-- Minimum Passing Threshold: 80%
+- Minimum Passing Threshold: {passing_score}%
 
 INSTRUCTIONS FOR GENERATING THE SYSTEM PROMPT:
 Construct a System Prompt instructing the Evaluator Agent to:
 1. Praise strong structure, clear domain terminology, engaging enterprise tone, and alignment with "{topic}".
 2. Evaluate technical relevance for Industry Domain "{practice_area}" ({domain_description}) and format expectations for "{content_type}" ({format_description}).
-3. Award high passing scores (85%–98%) for complete, well-written enterprise deliverables.
-4. Only request revisions if content is missing, blank, or severely incomplete.
+3. Score each criterion based on evidence in the draft; do not assume or target a particular score.
+4. Apply the configured passing threshold without changing workflow state or treating the score as an approval.
+5. Request revisions for any material factual, technical, structural, or brief-alignment gaps.
 
 Return raw System Prompt text only.
 """
 
 
+def _format_kwargs(title, content_type, topic, practice_area, format_description, domain_description, passing_score=80):
+    format_text = format_description or "Standard deliverable format structure"
+    domain_text = domain_description or "Enterprise domain best practices"
+    return {
+        "title": title,
+        "content_type": content_type,
+        "format": content_type,
+        "topic": topic,
+        "description": topic,
+        "practice_area": practice_area,
+        "industry_domain": practice_area,
+        "format_description": format_text,
+        "domain_description": domain_text,
+        "practice_area_description": domain_text,
+        "option_description": format_text,
+        "passing_score": passing_score,
+    }
+
+
+def build_meta_prompt(meta_template, format_kwargs, reviewer_instructions=None):
+    """Fill the meta template (falls back to the built-in one if the custom one is invalid)."""
+    format_kwargs = {**format_kwargs, "passing_score": format_kwargs.get("passing_score", 80)}
+    try:
+        meta_prompt = (meta_template or SUBAGENT_META_PROMPT).format(**format_kwargs)
+    except Exception:
+        meta_prompt = SUBAGENT_META_PROMPT.format(**format_kwargs)
+
+    if reviewer_instructions and reviewer_instructions.strip():
+        meta_prompt += f"\n\nADDITIONAL REVIEWER INSTRUCTIONS:\n{reviewer_instructions.strip()}"
+    return meta_prompt
+
+
 def generate_dynamic_system_prompt(doc, reviewer_instructions=None):
-	"""
-	Subagent execution: Analyzes Content Item metadata, Format descriptions, and Domain descriptions,
-	and returns a dynamic, custom System Prompt for evaluation.
-	Uses customizable subagent_meta_prompt from Marketing Settings if configured.
-	Optionally incorporates reviewer-specific instructions when triggered by a Reviewer.
-	"""
-	title = getattr(doc, "title", "Untitled Marketing Deliverable")
-	content_type = getattr(doc, "content_type", "Blog")
-	topic = getattr(doc, "description", None) or getattr(doc, "topic", "General Enterprise Analytics")
-	practice_area = getattr(doc, "industry_domain", None) or getattr(doc, "practice_area", "Cross-domain")
+    """
+    Subagent execution: analyzes Content Item metadata, Format descriptions, and Domain descriptions,
+    and returns a dynamic, custom System Prompt for evaluation.
+    Uses customizable subagent_meta_prompt from Marketing Settings if configured.
+    Any LLM or configuration failure falls back to build_fallback_dynamic_prompt, which only
+    builds a prompt and never produces a score.
+    """
+    title = getattr(doc, "title", "Untitled Marketing Deliverable")
+    content_type = getattr(doc, "content_type", "Blog")
+    topic = getattr(doc, "description", None) or getattr(doc, "topic", "General Enterprise Analytics")
+    practice_area = getattr(doc, "industry_domain", None) or getattr(doc, "practice_area", "Cross-domain")
 
-	format_description = ""
-	if content_type and frappe.db.exists("Content Item Option", content_type):
-		format_description = frappe.db.get_value("Content Item Option", content_type, "option_description") or ""
+    format_description = ""
+    if content_type and frappe.db.exists("Content Item Option", content_type):
+        format_description = (
+            frappe.db.get_value("Content Item Option", content_type, "option_description") or ""
+        )
 
-	domain_description = ""
-	if practice_area and frappe.db.exists("Content Item Option", practice_area):
-		domain_description = frappe.db.get_value("Content Item Option", practice_area, "option_description") or ""
+    domain_description = ""
+    if practice_area and frappe.db.exists("Content Item Option", practice_area):
+        domain_description = (
+            frappe.db.get_value("Content Item Option", practice_area, "option_description") or ""
+        )
 
-	format_kwargs = {
-		"title": title,
-		"content_type": content_type,
-		"format": content_type,
-		"topic": topic,
-		"description": topic,
-		"practice_area": practice_area,
-		"industry_domain": practice_area,
-		"format_description": format_description or "Standard deliverable format structure",
-		"domain_description": domain_description or "Enterprise domain best practices",
-		"practice_area_description": domain_description or "Enterprise domain best practices",
-		"option_description": format_description or "Standard deliverable format structure"
-	}
+    settings = frappe.get_single("Marketing Settings")
+    passing_score = int(getattr(settings, "ai_copilot_passing_score", 80) or 80)
+    format_kwargs = _format_kwargs(
+        title, content_type, topic, practice_area, format_description, domain_description, passing_score
+    )
+    meta_template = getattr(settings, "subagent_meta_prompt", None)
+    if not (meta_template and meta_template.strip()):
+        meta_template = SUBAGENT_META_PROMPT
 
-	settings = frappe.get_single("Marketing Settings")
-	meta_template = getattr(settings, "subagent_meta_prompt", None)
-	if not (meta_template and meta_template.strip()):
-		meta_template = SUBAGENT_META_PROMPT
+    meta_prompt = build_meta_prompt(meta_template, format_kwargs, reviewer_instructions)
 
-	llm_cfg = get_llm_config()
-	provider = llm_cfg.get("provider")
+    llm_cfg = get_llm_config()
+    provider = llm_cfg.get("provider")
+    model_name = llm_cfg.get("model")
+    started = time.monotonic()
 
-	try:
-		meta_prompt = meta_template.format(**format_kwargs)
-	except Exception:
-		meta_prompt = SUBAGENT_META_PROMPT.format(**format_kwargs)
+    try:
+        agent = Agent(
+            build_model(llm_cfg),
+            instructions=SUBAGENT_SYSTEM_PROMPT,
+            model_settings=build_model_settings(temperature=0.3, max_tokens=MAX_OUTPUT_TOKENS),
+            retries=OUTPUT_RETRIES,
+        )
+        generated = (agent.run_sync(meta_prompt).output or "").strip()
+        if len(generated) < MIN_PROMPT_CHARS:
+            raise ValueError("generated prompt is empty or too short")
+        log_llm_event(
+            STAGE, provider, model_name, doc.name, "ok",
+            duration_ms=(time.monotonic() - started) * 1000,
+        )
+        return generated
+    except Exception as exc:
+        log_llm_event(
+            STAGE, provider, model_name, doc.name, "fallback",
+            duration_ms=(time.monotonic() - started) * 1000, error=exc,
+        )
 
-	# Append reviewer instructions to meta prompt if provided
-	if reviewer_instructions and reviewer_instructions.strip():
-		meta_prompt += f"\n\nADDITIONAL REVIEWER INSTRUCTIONS:\n{reviewer_instructions.strip()}"
-
-	# If no live API key is configured or mock/custom provider, return structured dynamic template fallback
-	if provider in ["Mock Agent", "Custom"] or not llm_cfg.get("api_key") or llm_cfg.get("api_key") == "mock-key":
-		fallback = build_fallback_dynamic_prompt(title, content_type, topic, practice_area, format_description, domain_description, reviewer_instructions=reviewer_instructions)
-		log_raw_llm_request("Stage 1: Prompt Generator Subagent (Local / Mock)", provider, "Local Fallback Engine", {}, {"prompt": meta_prompt}, docname=doc.name)
-		log_raw_llm_response("Stage 1: Prompt Generator Subagent (Local / Mock)", provider, 200, fallback, docname=doc.name)
-		return fallback
-
-	url = ""
-	try:
-		if provider in ["APIM Gateway", "OpenAI"]:
-			url = f"{llm_cfg['endpoint'].rstrip('/')}/chat/completions"
-			headers = {
-				"Content-Type": "application/json",
-				"Authorization": f"Bearer {llm_cfg['api_key']}",
-				"api-key": llm_cfg["api_key"]
-			}
-
-			payload = {
-				"model": llm_cfg["model"],
-				"messages": [
-					{"role": "system", "content": "You are a prompt generator subagent."},
-					{"role": "user", "content": meta_prompt}
-				],
-				"temperature": 0.3
-			}
-
-			log_raw_llm_request("Stage 1: Prompt Generator Subagent", provider, url, headers, payload, docname=doc.name)
-
-			req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
-			with urllib.request.urlopen(req, timeout=30) as resp:
-				status_code = resp.getcode()
-				raw_bytes = resp.read()
-				raw_text = raw_bytes.decode("utf-8")
-				res_data = json.loads(raw_text)
-				generated_prompt = res_data["choices"][0]["message"]["content"].strip()
-				log_raw_llm_response("Stage 1: Prompt Generator Subagent", provider, status_code, raw_text, parsed_json=res_data, docname=doc.name)
-				return generated_prompt
-
-		elif provider == "Google Gemini":
-			url = f"{llm_cfg['endpoint']}/models/{llm_cfg['model']}:generateContent?key={llm_cfg['api_key']}"
-			headers = {"Content-Type": "application/json"}
-			payload = {
-				"contents": [{"parts": [{"text": meta_prompt}]}]
-			}
-
-			log_raw_llm_request("Stage 1: Prompt Generator Subagent", provider, url, headers, payload, docname=doc.name)
-
-			req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
-			with urllib.request.urlopen(req, timeout=30) as resp:
-				status_code = resp.getcode()
-				raw_bytes = resp.read()
-				raw_text = raw_bytes.decode("utf-8")
-				res_data = json.loads(raw_text)
-				generated_prompt = res_data["candidates"][0]["content"]["parts"][0]["text"].strip()
-				log_raw_llm_response("Stage 1: Prompt Generator Subagent", provider, status_code, raw_text, parsed_json=res_data, docname=doc.name)
-				return generated_prompt
-
-		elif provider == "Anthropic":
-			url = f"{llm_cfg['endpoint'].rstrip('/')}/messages"
-			headers = {
-				"Content-Type": "application/json",
-				"x-api-key": llm_cfg["api_key"],
-				"anthropic-version": "2023-06-01"
-			}
-			payload = {
-				"model": llm_cfg["model"],
-				"system": "You are a prompt generator subagent.",
-				"messages": [{"role": "user", "content": meta_prompt}],
-				"max_tokens": 1024,
-				"temperature": 0.3
-			}
-
-			log_raw_llm_request("Stage 1: Prompt Generator Subagent", provider, url, headers, payload, docname=doc.name)
-
-			req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
-			with urllib.request.urlopen(req, timeout=30) as resp:
-				status_code = resp.getcode()
-				raw_bytes = resp.read()
-				raw_text = raw_bytes.decode("utf-8")
-				res_data = json.loads(raw_text)
-				generated_prompt = res_data["content"][0]["text"].strip()
-				log_raw_llm_response("Stage 1: Prompt Generator Subagent", provider, status_code, raw_text, parsed_json=res_data, docname=doc.name)
-				return generated_prompt
-
-	except Exception as e:
-		frappe.log_error(f"Subagent prompt generation API call failed: {str(e)}")
-		log_raw_llm_error("Stage 1: Prompt Generator Subagent", provider, url, e, docname=doc.name)
-
-	# Fallback to local prompt builder
-	fallback = build_fallback_dynamic_prompt(title, content_type, topic, practice_area, format_description, domain_description, reviewer_instructions=reviewer_instructions)
-	log_raw_llm_response("Stage 1: Prompt Generator Subagent (Fallback Prompt)", provider, 200, fallback, docname=doc.name)
-	return fallback
+    return build_fallback_dynamic_prompt(
+        title, content_type, topic, practice_area, format_description, domain_description,
+        reviewer_instructions=reviewer_instructions, passing_score=passing_score,
+    )
 
 
+def build_fallback_dynamic_prompt(
+    title,
+    content_type,
+    topic,
+    practice_area,
+    format_description="",
+    domain_description="",
+    reviewer_instructions=None,
+    passing_score=None,
+):
+    """
+    Generates a dynamic system prompt using Marketing Settings evaluator_default_prompt if configured.
+    Optionally appends reviewer-specific instructions.
+    """
+    settings = frappe.get_single("Marketing Settings")
+    passing_score = passing_score or int(getattr(settings, "ai_copilot_passing_score", 80) or 80)
+    tmpl = getattr(settings, "evaluator_default_prompt", None)
+    format_kwargs = _format_kwargs(
+        title, content_type, topic, practice_area, format_description, domain_description, passing_score
+    )
 
-def log_terminal_ai_stage(stage_title, provider, url, payload, response, docname=None):
-	"""Prints formatted AI request payload and response directly to the terminal stdout."""
-	border = "=" * 80
-	print(f"\n{border}", flush=True)
-	print(f"🤖 [AI COPILOT] {stage_title.upper()} | Doc: {docname or 'N/A'} | Provider: {provider}", flush=True)
-	print(f"🌐 Endpoint: {url}", flush=True)
-	print(f"{'-' * 80}", flush=True)
-	print("📤 [REQUEST PAYLOAD / INPUT PROMPT]:", flush=True)
-	try:
-		if isinstance(payload, (dict, list)):
-			print(json.dumps(payload, indent=2, ensure_ascii=False), flush=True)
-		else:
-			print(str(payload).strip(), flush=True)
-	except Exception:
-		print(str(payload).strip(), flush=True)
-
-	print(f"{'-' * 80}", flush=True)
-	print("📥 [RESPONSE / GENERATED OUTPUT]:", flush=True)
-	try:
-		if isinstance(response, (dict, list)):
-			print(json.dumps(response, indent=2, ensure_ascii=False), flush=True)
-		elif isinstance(response, str):
-			try:
-				parsed = json.loads(response)
-				print(json.dumps(parsed, indent=2, ensure_ascii=False), flush=True)
-			except Exception:
-				print(str(response).strip(), flush=True)
-		else:
-			print(str(response).strip(), flush=True)
-	except Exception:
-		print(str(response).strip(), flush=True)
-	print(f"{border}\n", flush=True)
-
-
-
-def build_fallback_dynamic_prompt(title, content_type, topic, practice_area, format_description="", domain_description="", reviewer_instructions=None):
-	"""
-	Generates a dynamic system prompt using Marketing Settings evaluator_default_prompt if configured.
-	Optionally appends reviewer-specific instructions.
-	"""
-	settings = frappe.get_single("Marketing Settings")
-	tmpl = getattr(settings, "evaluator_default_prompt", None)
-	format_kwargs = {
-		"title": title,
-		"content_type": content_type,
-		"format": content_type,
-		"topic": topic,
-		"description": topic,
-		"practice_area": practice_area,
-		"industry_domain": practice_area,
-		"format_description": format_description or "Standard deliverable format structure",
-		"domain_description": domain_description or "Enterprise domain best practices",
-		"practice_area_description": domain_description or "Enterprise domain best practices",
-		"option_description": format_description or "Standard deliverable format structure"
-	}
-
-	if tmpl and tmpl.strip():
-		try:
-			base_prompt = tmpl.format(**format_kwargs)
-			reviewer_section = ""
-			if reviewer_instructions and reviewer_instructions.strip():
-				reviewer_section = f"\n\nADDITIONAL REVIEWER INSTRUCTIONS:\n{reviewer_instructions.strip()}"
-			return base_prompt + reviewer_section + """
+    if tmpl and tmpl.strip():
+        try:
+            base_prompt = tmpl.format(**format_kwargs)
+            reviewer_section = ""
+            if reviewer_instructions and reviewer_instructions.strip():
+                reviewer_section = f"\n\nADDITIONAL REVIEWER INSTRUCTIONS:\n{reviewer_instructions.strip()}"
+            return base_prompt + reviewer_section + """
 
 You must respond in valid JSON with:
 {
@@ -254,20 +181,20 @@ You must respond in valid JSON with:
   "actionable_feedback": "Detailed formatted markdown advice for the Content Writer on how to improve this deliverable."
 }
 """
-		except Exception:
-			pass
+        except Exception:
+            pass
 
-	domain_info = f"{practice_area} ({domain_description})" if domain_description else practice_area
-	format_info = f"{content_type} ({format_description})" if format_description else content_type
+    domain_info = f"{practice_area} ({domain_description})" if domain_description else practice_area
+    format_info = f"{content_type} ({format_description})" if format_description else content_type
 
-	return f"""You are an encouraging AI Copilot & Technical Reviewer for Optimum Data Analytics (ODA).
+    return f"""You are an encouraging AI Copilot & Technical Reviewer for Optimum Data Analytics (ODA).
 You are evaluating the {format_info} titled "{title}" in the domain of {domain_info}.
 
 EVALUATION GUIDELINES FOR THIS DELIVERABLE:
 1. Praise strong structure, clear domain terminology ({practice_area}), and alignment with "{topic}".
 2. Evaluate technical depth for {domain_info} and layout compliance for {format_info}.
-3. Award high passing scores (85%–98%) for complete, well-written, publishable enterprise content.
-4. Passing threshold is 80%.
+3. Score each criterion based on evidence in the draft; do not assume or target a particular score.
+4. Passing threshold is {passing_score}%. The score is informational and must not approve or route the item.
 
 You must respond in valid JSON with:
 {{

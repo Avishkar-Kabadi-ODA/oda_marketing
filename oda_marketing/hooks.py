@@ -34,7 +34,8 @@ has_permission = {
 # Scheduled Events (Overdue SLA Engine & Reminders)
 scheduler_events = {
 	"hourly": [
-		"oda_marketing.oda_marketing.doctype.content_item.content_item.send_overdue_sla_notifications"
+		"oda_marketing.oda_marketing.doctype.content_item.content_item.send_overdue_sla_notifications",
+		"oda_marketing.oda_marketing.ai_engine.runner.recover_stale_ai_reviews",
 	]
 }
 
@@ -47,4 +48,3 @@ doc_events = {}
 
 # Home Pages
 home_page = "login"
-

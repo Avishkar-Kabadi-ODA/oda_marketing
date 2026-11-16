@@ -115,7 +115,10 @@ function show_excel_import_dialog(listview) {
 						if (res.error_count > 0) {
 							msg += `<p style="color: #DC2626; font-weight: 600; margin-top: 10px;">⚠️ ${res.error_count} row(s) had errors and were skipped:</p><ul style="max-height: 150px; overflow-y: auto; padding-left: 18px; color: #475569;">`;
 							res.errors.forEach(err => {
-								msg += `<li><b>Row ${err.row} (${err.title}):</b> ${err.errors.join(", ")}</li>`;
+								const row = frappe.utils.escape_html(err.row);
+								const title = frappe.utils.escape_html(err.title || "");
+								const errors = frappe.utils.escape_html((err.errors || []).join(", "));
+								msg += `<li><b>Row ${row} (${title}):</b> ${errors}</li>`;
 							});
 							msg += `</ul>`;
 						}

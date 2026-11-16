@@ -119,6 +119,27 @@ class TestPermissionsAndFeatures(FrappeTestCase):
 		# Now writer should have read access
 		self.assertTrue(has_content_item_permission(item, "read", "test_writer_1@example.com"))
 
+	def test_format_publisher_access_is_limited_to_approved_items(self):
+		frappe.db.set_value(
+			"Content Item Option",
+			"Blog",
+			"default_publisher",
+			"test_writer_1@example.com",
+			update_modified=False,
+		)
+		planned = frappe._dict({"workflow_state": "Planned", "content_type": "Blog"})
+		approved = frappe._dict({"workflow_state": "Approved", "content_type": "Blog"})
+
+		self.assertFalse(has_content_item_permission(planned, user="test_writer_1@example.com"))
+		self.assertTrue(has_content_item_permission(approved, user="test_writer_1@example.com"))
+		self.assertFalse(
+			has_content_item_permission(approved, ptype="create", user="test_writer_1@example.com")
+		)
+		self.assertIn(
+			"Approved",
+			get_content_item_permission_query_conditions("test_writer_1@example.com"),
+		)
+
 	def test_document_level_role_scoping(self):
 		"""Ensures a user assigned as author gets treated strictly as Writer, and Lead reviewer retains Lead authority."""
 		from frappe.model.workflow import apply_workflow
@@ -188,7 +209,22 @@ class TestPermissionsAndFeatures(FrappeTestCase):
 		os.makedirs(os.path.dirname(test_file_path), exist_ok=True)
 		wb.save(test_file_path)
 
-		res = import_content_items_from_excel(file_url="/files/test_content_import.xlsx", default_calendar="2026 Test Calendar")
+		file_doc = frappe.get_doc({
+			"doctype": "File",
+			"file_name": "test_content_import.xlsx",
+			"file_url": "/files/test_content_import.xlsx",
+			"is_private": 0,
+			"folder": "Home/Attachments",
+		})
+		file_doc.flags.copy_from_existing_file = True
+		file_doc.insert(ignore_permissions=True)
+
+		try:
+			res = import_content_items_from_excel(file_url="/files/test_content_import.xlsx", default_calendar="2026 Test Calendar")
+		finally:
+			if os.path.exists(test_file_path):
+				os.remove(test_file_path)
+
 		self.assertTrue(res["success"])
 		self.assertEqual(res["created_count"], 2)
 		self.assertEqual(res["error_count"], 0)
@@ -198,9 +234,6 @@ class TestPermissionsAndFeatures(FrappeTestCase):
 			doc = frappe.get_doc("Content Item", created["name"])
 			self.assertEqual(doc.workflow_state, "Planned")
 			self.assertEqual(doc.status, "Planned")
-
-		if os.path.exists(test_file_path):
-			os.remove(test_file_path)
 
 	def test_dashboard_metrics_api(self):
 		"""Tests dashboard metrics calculation across calendar and periods."""
@@ -493,5 +526,3 @@ class TestPermissionsAndFeatures(FrappeTestCase):
 		item.content_file_1 = "https://docs.google.com/document/d/12345/edit"
 		item.save()
 		self.assertEqual(item.content_file_1, "https://docs.google.com/document/d/12345/edit")
-
-

@@ -3,34 +3,25 @@
 
 import os
 import frappe
-from frappe.utils import get_site_path
+from oda_marketing.oda_marketing.file_security import resolve_site_file
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".svg", ".gif"}
 MARKDOWN_EXTENSIONS = {".md", ".markdown"}
+MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
 
 
-def resolve_disk_path(file_relative_path):
+def resolve_disk_path(file_relative_path, doc=None):
 	"""Resolves the absolute filesystem path for a Frappe file attachment."""
 	if not file_relative_path:
 		return None
 
-	abs_path = None
-	if frappe.db.exists("File", {"file_url": file_relative_path}):
-		try:
-			file_doc = frappe.get_doc("File", {"file_url": file_relative_path})
-			abs_path = file_doc.get_full_path()
-		except Exception:
-			pass
-
-	if not (abs_path and os.path.exists(abs_path)):
-		if file_relative_path.startswith("/private/files/"):
-			abs_path = get_site_path("private", "files", os.path.basename(file_relative_path))
-		elif file_relative_path.startswith("/files/"):
-			abs_path = get_site_path("public", "files", os.path.basename(file_relative_path))
-		else:
-			abs_path = file_relative_path
-
-	return abs_path if (abs_path and os.path.exists(abs_path)) else None
+	attached_to = ("Content Item", doc.name) if doc else None
+	file_doc, abs_path = resolve_site_file(
+		file_relative_path,
+		max_bytes=MAX_ATTACHMENT_BYTES,
+		attached_to=attached_to,
+	)
+	return abs_path if file_doc and abs_path and os.path.isfile(abs_path) else None
 
 
 def has_markdown_attachment(doc):
@@ -43,13 +34,15 @@ def has_markdown_attachment(doc):
 		val = getattr(doc, field, None)
 		if val and str(val).strip():
 			clean_path = str(val).strip().split("?")[0]
+			if not clean_path.startswith(("/files/", "/private/files/")):
+				continue
 			ext = os.path.splitext(clean_path)[1].lower()
 			if ext in MARKDOWN_EXTENSIONS:
 				return True
 	return False
 
 
-def extract_file_content(file_relative_path):
+def extract_file_content(file_relative_path, doc=None):
 	"""
 	Extracts readable plain text from a given Frappe file attachment path.
 	Supports .md, .markdown, .txt, .html, .docx, .pdf files.
@@ -60,13 +53,13 @@ def extract_file_content(file_relative_path):
 
 	clean_path = str(file_relative_path).strip().split("?")[0]
 	ext = os.path.splitext(clean_path)[1].lower()
+	abs_path = resolve_disk_path(file_relative_path, doc=doc)
 
 	if ext in IMAGE_EXTENSIONS:
 		return f"[Image Attachment: {os.path.basename(clean_path)}]"
 
-	abs_path = resolve_disk_path(file_relative_path)
 	if not abs_path:
-		return f"[File Path Attached: {file_relative_path} (File not found on server disk)]"
+		return f"[Attachment: {os.path.basename(clean_path)} (file record unavailable)]"
 
 	try:
 		if ext == ".docx":
@@ -160,17 +153,17 @@ def get_combined_draft_text(doc):
 
 	# Extract Primary Attachment (content_file_1)
 	if doc.content_file_1:
-		t1 = extract_file_content(doc.content_file_1)
+		t1 = extract_file_content(doc.content_file_1, doc=doc)
 		parts.append(f"=== PRIMARY DRAFT ATTACHMENT ({os.path.basename(doc.content_file_1)}) ===\n{t1}")
 
 	# Extract Supporting File 1 (content_file_2)
 	if doc.content_file_2:
-		t2 = extract_file_content(doc.content_file_2)
+		t2 = extract_file_content(doc.content_file_2, doc=doc)
 		parts.append(f"=== SUPPORTING ATTACHMENT 1 ({os.path.basename(doc.content_file_2)}) ===\n{t2}")
 
 	# Extract Supporting File 2 (content_file_3)
 	if doc.content_file_3:
-		t3 = extract_file_content(doc.content_file_3)
+		t3 = extract_file_content(doc.content_file_3, doc=doc)
 		parts.append(f"=== SUPPORTING ATTACHMENT 2 ({os.path.basename(doc.content_file_3)}) ===\n{t3}")
 
 	return "\n\n".join(parts) if parts else "[No draft attachment text or notes found. Evaluation based on title and topic.]"

@@ -8,6 +8,47 @@ from frappe.utils import add_days, getdate, nowdate, now_datetime, get_url
 
 
 class ContentItem(Document):
+	def as_dict(self, *args, **kwargs):
+		data = super().as_dict(*args, **kwargs)
+		if getattr(frappe.flags, "in_ai_copilot_review", False):
+			return data
+
+		role = self.get_user_effective_role()
+		if role == "Lead":
+			return data
+
+		review_type = role if role in ("Writer", "Reviewer") else None
+		for fieldname in (
+			"writer_copilot_feedback",
+			"reviewer_copilot_feedback",
+			"ai_copilot_feedback",
+			"ai_generated_prompt",
+			"reviewer_copilot_instructions",
+			"ai_review_started_on",
+			"ai_review_job_token",
+		):
+			data[fieldname] = None
+
+		if review_type:
+			own_feedback_field = f"{review_type.lower()}_copilot_feedback"
+			data[own_feedback_field] = self.get(own_feedback_field)
+			if review_type == "Reviewer":
+				data["reviewer_copilot_instructions"] = self.reviewer_copilot_instructions
+
+		if "ai_reviews" in data:
+			data["ai_reviews"] = [
+				{
+					key: row.get(key)
+					for key in ("name", "review_type", "review_datetime", "score", "status", "feedback")
+				}
+				for row in data["ai_reviews"]
+				if review_type and row.get("review_type") == review_type
+			]
+			data["ai_score"] = data["ai_reviews"][-1]["score"] if data["ai_reviews"] else None
+		else:
+			data["ai_score"] = None
+		return data
+
 	def validate(self):
 		self.validate_description_length()
 		self.validate_assigned_to_reviewer_mutual_exclusion()
@@ -15,8 +56,10 @@ class ContentItem(Document):
 		self.validate_metadata_edit_permissions()
 		self.validate_writer_readonly_before_inprogress()
 		self.validate_reviewer_readonly_fields()
+		self.validate_ai_fields()
 		self.validate_workflow_transition_permissions()
 		self.sync_status_with_workflow()
+		self.validate_due_date_with_publish_date()
 		self.validate_publish_date_with_calendar()
 		self.check_overdue_sla()
 		self.validate_attachment_file_formats()
@@ -63,10 +106,9 @@ class ContentItem(Document):
 				)
 
 		elif action in ["Publish"]:
-			from oda_marketing.permissions import get_default_publisher
-			publisher = get_default_publisher()
-			is_publisher = user_lower == (publisher or "").lower()
-			if not (is_lead or is_publisher):
+			from oda_marketing.permissions import is_content_item_publisher
+			is_publisher = is_content_item_publisher(user, self)
+			if is_doc_writer or not (is_lead or is_publisher):
 				frappe.throw(_("Only Marketing Leads and Publishers can mark deliverables as Published."), frappe.PermissionError)
 
 	def validate_workflow_transition_permissions(self):
@@ -125,10 +167,9 @@ class ContentItem(Document):
 
 		# Publishing transition: ONLY Lead / Publisher (not writer)
 		if prev_state == "Approved" and curr_state == "Published":
-			from oda_marketing.permissions import get_default_publisher
-			publisher = get_default_publisher()
-			is_publisher = user_lower == (publisher or "").lower()
-			if not (is_lead or is_publisher):
+			from oda_marketing.permissions import is_content_item_publisher
+			is_publisher = is_content_item_publisher(user, self)
+			if is_doc_writer or not (is_lead or is_publisher):
 				frappe.throw(_("Only Marketing Leads and Publishers can mark deliverables as Published."), frappe.PermissionError)
 
 	def before_insert(self):
@@ -291,12 +332,96 @@ class ContentItem(Document):
 						frappe.PermissionError
 					)
 
+	def validate_ai_fields(self):
+		if getattr(frappe.flags, "in_ai_copilot_review", False):
+			return
+
+		protected_fields = (
+			"ai_score",
+			"ai_review_status",
+			"ai_review_error",
+			"ai_review_started_on",
+			"ai_review_job_token",
+			"writer_copilot_feedback",
+			"reviewer_copilot_feedback",
+			"ai_copilot_feedback",
+			"ai_generated_prompt",
+			"ai_reviews",
+		)
+		before = self.get_doc_before_save()
+		role = self.get_user_effective_role()
+		visible_before = before.as_dict() if before else {}
+		for fieldname in protected_fields:
+			current = self.get(fieldname)
+			if before and fieldname == "ai_reviews":
+				current_rows = [
+					self._review_row_key(row) for row in (current or [])
+				]
+				persisted_rows = [
+					self._review_row_key(row) for row in (before.get(fieldname) or [])
+				]
+				visible_rows = [
+					self._review_row_key(row) for row in (visible_before.get(fieldname) or [])
+				]
+				changed = current_rows != persisted_rows and current_rows != visible_rows
+			else:
+				persisted_value = before.get(fieldname) if before else None
+				visible_value = visible_before.get(fieldname)
+				changed = before and current != persisted_value and current != visible_value
+				if (
+					before
+					and fieldname == "ai_score"
+					and current in (None, 0, 0.0)
+					and persisted_value in (None, 0, 0.0)
+					and visible_value in (None, 0, 0.0)
+				):
+					changed = False
+			if before and changed:
+				frappe.throw(
+					_("AI evaluation field <b>{0}</b> is managed by the Copilot and cannot be edited directly.").format(
+						self.meta.get_label(fieldname) or fieldname
+					),
+					frappe.PermissionError,
+				)
+			if before:
+				self.set(fieldname, before.get(fieldname))
+			if not before and current not in (None, "", "Not Started", []):
+				frappe.throw(
+					_("AI evaluation fields are managed by the Copilot and cannot be set directly."),
+					frappe.PermissionError,
+				)
+
+		if before:
+			expected_instructions = visible_before.get("reviewer_copilot_instructions")
+			if self.reviewer_copilot_instructions != expected_instructions and role not in ("Reviewer", "Lead"):
+				frappe.throw(
+					_("Only the assigned reviewer or a Marketing Lead can edit Copilot reviewer instructions."),
+					frappe.PermissionError,
+				)
+			if role not in ("Reviewer", "Lead"):
+				self.reviewer_copilot_instructions = before.reviewer_copilot_instructions
+
+	def _review_row_key(self, row):
+		get_value = row.get if hasattr(row, "get") else lambda key: getattr(row, key, None)
+		return tuple(
+			get_value(key)
+			for key in ("name", "review_type", "review_datetime", "score", "status", "feedback")
+		)
+
 	def sync_status_with_workflow(self):
 		wf_state = getattr(self, "workflow_state", None)
 		if wf_state:
 			self.status = wf_state
 		elif not getattr(self, "status", None):
 			self.status = "Planned"
+
+	def validate_due_date_with_publish_date(self):
+		if self.due_date and self.planned_publish_date:
+			if getdate(self.due_date) > getdate(self.planned_publish_date):
+				frappe.throw(
+					_("Due Date cannot be later than Planned Publish Date."),
+					frappe.ValidationError,
+				)
 
 	def validate_publish_date_with_calendar(self):
 		if self.content_calendar and self.planned_publish_date:
@@ -310,9 +435,12 @@ class ContentItem(Document):
 	def check_overdue_sla(self):
 		settings = frappe.get_single("Marketing Settings")
 		if getattr(settings, "enable_auto_overdue_flag", 0):
-			if self.due_date and getattr(self, "workflow_state", None) not in ["Approved", "Published"]:
-				if getdate(nowdate()) > getdate(self.due_date):
-					self.risk_flag = "Late"
+			is_open = getattr(self, "workflow_state", None) not in ["Approved", "Published"]
+			is_late = bool(self.due_date and is_open and getdate(nowdate()) > getdate(self.due_date))
+			if is_late:
+				self.risk_flag = "Late"
+			elif self.risk_flag == "Late":
+				self.risk_flag = "On track"
 
 	def validate_attachment_file_formats(self):
 		"""Restricts attachment fields to Markdown files (.md, .markdown), Images (.png, .svg, .jpeg, .jpg, .webp, .gif), or web links (http/https). PDF, DOCX, and other formats are restricted."""
@@ -388,8 +516,21 @@ class ContentItem(Document):
 	def get_file_link_html(self, file_path, label="View Primary Draft"):
 		if not file_path:
 			return ""
-		full_url = get_url(file_path)
-		return f'<a href="{full_url}" target="_blank" style="color: #2563eb; text-decoration: underline; font-weight: 600;">{label}</a>'
+		from urllib.parse import urlsplit
+
+		from frappe.utils import escape_html
+
+		parsed = urlsplit(file_path)
+		if parsed.scheme:
+			if parsed.scheme not in ("http", "https") or not parsed.netloc:
+				return ""
+			full_url = file_path
+		elif file_path.startswith("/") and not file_path.startswith("//"):
+			full_url = get_url(file_path)
+		else:
+			return ""
+
+		return f'<a href="{escape_html(full_url)}" target="_blank" rel="noopener noreferrer" style="color: #2563eb; text-decoration: underline; font-weight: 600;">{escape_html(label)}</a>'
 
 	def get_publisher_email(self):
 		"""Returns the format-specific publisher from Content Item Option, falling back to Marketing Settings."""
@@ -542,18 +683,47 @@ class ContentItem(Document):
 
 
 def send_overdue_sla_notifications():
-	"""Scheduled job to alert involved parties for late items and upcoming due dates (Restricted to Business Hours)."""
+	"""Recompute overdue flags and send deduplicated SLA notifications during site business hours."""
 	settings = frappe.get_single("Marketing Settings")
-	if not settings.enable_email_notifications:
-		return
-
 	today = getdate(nowdate())
 
-	# Execute email dispatch ONCE per day at Business Hours Start (default 9 AM / 09:00)
 	current_hour = frappe.utils.now_datetime().hour
 	start_hour = int(getattr(settings, "business_hours_start", 9) or 9)
+	end_hour = int(getattr(settings, "business_hours_end", 19) or 19)
 
-	if current_hour != start_hour:
+	def iter_items(filters, fields):
+		last_name = ""
+		while True:
+			batch_filters = dict(filters)
+			if last_name:
+				batch_filters["name"] = [">", last_name]
+			batch = frappe.get_all(
+				"Content Item",
+				filters=batch_filters,
+				fields=fields,
+				order_by="name asc",
+				limit_page_length=200,
+			)
+			if not batch:
+				return
+			for row in batch:
+				yield row
+			last_name = batch[-1].name
+
+	if getattr(settings, "enable_auto_overdue_flag", 0):
+		open_states = {"workflow_state": ["not in", ["Approved", "Published"]]}
+		for row in iter_items(
+			{**open_states, "due_date": ["<", today], "risk_flag": ["!=", "Late"]},
+			["name"],
+		):
+			frappe.db.set_value("Content Item", row.name, "risk_flag", "Late", update_modified=False)
+
+		for row in iter_items({"risk_flag": "Late"}, ["name", "due_date", "workflow_state", "status"]):
+			state = row.workflow_state or row.status or "Planned"
+			if state in ("Approved", "Published") or not row.due_date or getdate(row.due_date) >= today:
+				frappe.db.set_value("Content Item", row.name, "risk_flag", "On track", update_modified=False)
+
+	if not settings.enable_email_notifications or not is_business_hour(current_hour, start_hour, end_hour):
 		return
 
 	template_name = getattr(settings, "overdue_email_template", None) or getattr(settings, "overdue_sla_email_template", None)
@@ -562,18 +732,13 @@ def send_overdue_sla_notifications():
 
 	tmpl = frappe.get_doc("Email Template", template_name)
 
-	# Send alerts for overdue (Late) items (deduplicated by last_overdue_notified_on)
-	overdue_items = frappe.get_all(
-		"Content Item",
-		filters={
+	for item_data in iter_items(
+		{
 			"risk_flag": "Late",
-			"workflow_state": ["not in", ["Approved", "Published"]]
+			"workflow_state": ["not in", ["Approved", "Published"]],
 		},
-		fields=["name", "last_overdue_notified_on"]
-	)
-
-	for item_data in overdue_items:
-		# Prevent daily duplicate emails if already notified today
+		["name", "last_overdue_notified_on"],
+	):
 		if item_data.last_overdue_notified_on and getdate(item_data.last_overdue_notified_on) == today:
 			continue
 
@@ -598,33 +763,41 @@ def send_overdue_sla_notifications():
 				)
 				item.db_set("last_overdue_notified_on", today, update_modified=False)
 			except Exception as e:
-				frappe.log_error(f"Failed to send overdue email for {item.name}: {str(e)}")
+				frappe.log_error(
+					title="Overdue SLA email failed",
+					message=f"Content Item {item.name}: {type(e).__name__}",
+				)
 
-	# Send reminder notifications for items approaching due date (Up to 3 reminders: Marketing Settings default + 2 content-level)
 	sla_reminder_enabled = getattr(settings, "sla_reminder_enabled", 0)
-
-	active_items = frappe.get_all(
-		"Content Item",
-		filters={
-			"risk_flag": ["!=", "Late"],
-			"workflow_state": ["not in", ["Approved", "Published"]]
-		},
-		fields=["name", "due_date", "reminder_1_days_before", "reminder_2_days_before"]
-	)
 
 	default_days_before = int(getattr(settings, "sla_reminder_days_before", 3) or 3) if sla_reminder_enabled else None
 
-	# Dedicated Due Date Reminder template fallback
-	reminder_template_name = "Marketing Due Date Reminder" if frappe.db.exists("Email Template", "Marketing Due Date Reminder") else template_name
+	reminder_template_name = (
+		"Marketing Due Date Reminder"
+		if frappe.db.exists("Email Template", "Marketing Due Date Reminder")
+		else template_name
+	)
 	reminder_tmpl = frappe.get_doc("Email Template", reminder_template_name) if reminder_template_name else tmpl
 
-	for item_data in active_items:
+	for item_data in iter_items(
+		{
+			"workflow_state": ["not in", ["Approved", "Published"]],
+		},
+		[
+			"name",
+			"due_date",
+			"reminder_1_days_before",
+			"reminder_2_days_before",
+			"last_sla_reminder_sent_on",
+		],
+	):
+		if item_data.last_sla_reminder_sent_on and getdate(item_data.last_sla_reminder_sent_on) == today:
+			continue
 		if not item_data.due_date:
 			continue
 
 		due_date = getdate(item_data.due_date)
 
-		# Collect up to 3 reminder day offsets
 		reminder_offsets = set()
 		if default_days_before is not None:
 			reminder_offsets.add(default_days_before)
@@ -633,17 +806,11 @@ def send_overdue_sla_notifications():
 		if item_data.reminder_2_days_before:
 			reminder_offsets.add(int(item_data.reminder_2_days_before))
 
-		# Check if today matches any of the reminder dates
-		should_remind = False
-		matched_days = None
-		for days in sorted(reminder_offsets):
-			rem_date = add_days(due_date, -days)
-			if getdate(rem_date) == today:
-				should_remind = True
-				matched_days = days
-				break
-
-		if should_remind:
+		matched_days = next(
+			(days for days in sorted(reminder_offsets) if getdate(add_days(due_date, -days)) == today),
+			None,
+		)
+		if matched_days is not None:
 			item = frappe.get_doc("Content Item", item_data.name)
 			recipients = set()
 			if item.assigned_to:
@@ -664,10 +831,16 @@ def send_overdue_sla_notifications():
 						message=message,
 						now=True
 					)
+					item.db_set("last_sla_reminder_sent_on", today, update_modified=False)
 				except Exception as e:
-					frappe.log_error(f"Failed to send reminder email for {item.name}: {str(e)}")
+					frappe.log_error(
+						title="Due-date reminder email failed",
+						message=f"Content Item {item.name}: {type(e).__name__}",
+					)
 
-	frappe.db.commit()
+
+def is_business_hour(current_hour, start_hour, end_hour):
+	return start_hour <= current_hour < end_hour
 
 
 import io
@@ -679,6 +852,7 @@ from openpyxl.utils import get_column_letter
 @frappe.whitelist()
 def get_reviewer_users(doctype=None, txt="", searchfield="name", start=0, page_len=20, filters=None):
 	"""Filters Reviewer link dropdown to show active System Users. Excludes the assigned writer if provided."""
+	_require_assignment_lookup_permission()
 	exclude_user = None
 	if isinstance(filters, dict):
 		exclude_user = filters.get("assigned_to") or filters.get("exclude_user")
@@ -719,6 +893,7 @@ def get_reviewer_users(doctype=None, txt="", searchfield="name", start=0, page_l
 @frappe.whitelist()
 def get_assigned_to_users(doctype=None, txt="", searchfield="name", start=0, page_len=20, filters=None):
 	"""Filters Assigned To link dropdown to show active System Users. Excludes the reviewer if provided."""
+	_require_assignment_lookup_permission()
 	exclude_user = None
 	if isinstance(filters, dict):
 		exclude_user = filters.get("reviewer_technical") or filters.get("exclude_user")
@@ -749,6 +924,17 @@ def get_assigned_to_users(doctype=None, txt="", searchfield="name", start=0, pag
 		ORDER BY u.name ASC
 		LIMIT %s, %s
 	""", tuple(params))
+
+
+def _require_assignment_lookup_permission():
+	user = frappe.session.user
+	if user == "Administrator":
+		return
+	if not {"Marketing Lead", "System Manager"}.intersection(frappe.get_roles(user)):
+		frappe.throw(
+			_("Only Marketing Leads and System Managers can search for Content Item assignees."),
+			frappe.PermissionError,
+		)
 
 
 @frappe.whitelist()
@@ -869,16 +1055,15 @@ def import_content_items_from_excel(file_url=None, default_calendar=None):
 	if not file_url:
 		frappe.throw(_("Please provide an uploaded file URL to import."), frappe.ValidationError)
 
-	# Read file from filesystem
-	file_doc = frappe.get_doc("File", {"file_url": file_url}) if frappe.db.exists("File", {"file_url": file_url}) else None
-	if file_doc:
-		file_path = file_doc.get_full_path()
-	else:
-		file_path = frappe.get_site_path("public", file_url.lstrip("/"))
+	from oda_marketing.oda_marketing.file_security import resolve_site_file
+
+	file_doc, file_path = resolve_site_file(file_url, max_bytes=10 * 1024 * 1024)
+	if not file_doc or not file_path:
+		frappe.throw(_("The uploaded import file could not be found."), frappe.DoesNotExistError)
 
 	import os
-	if not os.path.exists(file_path):
-		frappe.throw(_("File not found on server at {0}").format(file_path), frappe.DoesNotExistError)
+	if os.path.splitext(file_path)[1].lower() not in {".csv", ".xlsx"}:
+		frappe.throw(_("Only CSV and XLSX import files are supported."), frappe.ValidationError)
 
 	# Determine default calendar fallback from import dialog parameter or first active calendar
 	if not default_calendar or not frappe.db.exists("Content Calendar", default_calendar):
@@ -1127,81 +1312,72 @@ def get_dashboard_metrics(calendar=None, year=None, month=None, format=None, dom
 
 	where_str = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
-	# Fetch raw item data matching filter
-	items = frappe.db.sql(f"""
+	aggregate = frappe.db.sql(f"""
 		SELECT
-			name, title, status, workflow_state, content_type,
-			industry_domain, planned_publish_date, due_date,
-			risk_flag, ai_score, assigned_to, reviewer_technical
+			COUNT(*) AS total,
+			SUM(CASE WHEN COALESCE(NULLIF(workflow_state, ''), NULLIF(status, ''), 'Planned') = 'Planned' THEN 1 ELSE 0 END) AS planned,
+			SUM(CASE WHEN COALESCE(NULLIF(workflow_state, ''), NULLIF(status, ''), 'Planned') = 'Briefed' THEN 1 ELSE 0 END) AS briefed,
+			SUM(CASE WHEN COALESCE(NULLIF(workflow_state, ''), NULLIF(status, ''), 'Planned') = 'In Progress' THEN 1 ELSE 0 END) AS in_progress,
+			SUM(CASE WHEN COALESCE(NULLIF(workflow_state, ''), NULLIF(status, ''), 'Planned') = 'In Review' THEN 1 ELSE 0 END) AS in_review,
+			SUM(CASE WHEN COALESCE(NULLIF(workflow_state, ''), NULLIF(status, ''), 'Planned') = 'In Revision' THEN 1 ELSE 0 END) AS in_revision,
+			SUM(CASE WHEN COALESCE(NULLIF(workflow_state, ''), NULLIF(status, ''), 'Planned') = 'Approved' THEN 1 ELSE 0 END) AS approved,
+			SUM(CASE WHEN COALESCE(NULLIF(workflow_state, ''), NULLIF(status, ''), 'Planned') = 'Published' THEN 1 ELSE 0 END) AS published,
+			SUM(CASE WHEN risk_flag = 'Late' THEN 1 ELSE 0 END) AS late_risk,
+			AVG(CASE WHEN ai_score > 0 THEN ai_score END) AS avg_ai_score
 		FROM `tabContent Item`
 		{where_str}
-	""", params, as_dict=True)
+	""", params, as_dict=True)[0]
 
-	# KPI Counters
 	counts = {
-		"total": len(items),
-		"planned": 0,
-		"briefed": 0,
-		"in_progress": 0,
-		"in_review": 0,
-		"in_revision": 0,
-		"approved": 0,
-		"published": 0,
-		"late_risk": 0,
-		"avg_ai_score": 0.0
+		key: int(aggregate.get(key) or 0)
+		for key in (
+			"total", "planned", "briefed", "in_progress", "in_review",
+			"in_revision", "approved", "published", "late_risk",
+		)
 	}
+	counts["avg_ai_score"] = round(float(aggregate.get("avg_ai_score") or 0), 1)
 
 	status_dist = {
 		"Planned": 0, "Briefed": 0, "In Progress": 0,
-		"In Review": 0, "In Revision": 0, "Approved": 0, "Published": 0
+		"In Review": 0, "In Revision": 0, "Approved": 0, "Published": 0,
 	}
 	format_dist = {}
 	domain_dist = {}
 	risk_dist = {"On track": 0, "At risk": 0, "Late": 0}
 	monthly_trend = {m: 0 for m in range(1, 13)}
 
-	ai_scores = []
+	def grouped_counts(expression):
+		return frappe.db.sql(
+			f"SELECT {expression} AS label, COUNT(*) AS total FROM `tabContent Item` {where_str} GROUP BY label",
+			params,
+			as_dict=True,
+		)
 
-	for it in items:
-		st = it.workflow_state or it.status or "Planned"
-		if st in status_dist:
-			status_dist[st] += 1
-		else:
-			status_dist[st] = 1
-
-		# Key count mapping
-		key = st.lower().replace(" ", "_")
-		if key in counts:
-			counts[key] += 1
-
-		# Formats
-		fmt = it.content_type or "Unassigned"
-		format_dist[fmt] = format_dist.get(fmt, 0) + 1
-
-		# Domains
-		dom = it.industry_domain or "General"
-		domain_dist[dom] = domain_dist.get(dom, 0) + 1
-
-		# Risk
-		rf = it.risk_flag or "On track"
-		risk_dist[rf] = risk_dist.get(rf, 0) + 1
-		if rf == "Late":
-			counts["late_risk"] += 1
-
-		# AI Scores
-		if it.ai_score is not None and it.ai_score > 0:
-			ai_scores.append(float(it.ai_score))
-
-		# Monthly trend
-		if it.planned_publish_date:
-			try:
-				d = getdate(it.planned_publish_date)
-				monthly_trend[d.month] += 1
-			except Exception:
-				pass
-
-	if ai_scores:
-		counts["avg_ai_score"] = round(sum(ai_scores) / len(ai_scores), 1)
+	for row in grouped_counts("COALESCE(NULLIF(workflow_state, ''), NULLIF(status, ''), 'Planned')"):
+		status_dist[row.label] = row.total
+	for row in grouped_counts("COALESCE(NULLIF(content_type, ''), 'Unassigned')"):
+		format_dist[row.label] = row.total
+	for row in grouped_counts("COALESCE(NULLIF(industry_domain, ''), 'General')"):
+		domain_dist[row.label] = row.total
+	for row in grouped_counts("COALESCE(NULLIF(risk_flag, ''), 'On track')"):
+		risk_dist[row.label] = row.total
+	for row in frappe.db.sql(
+		f"""
+		SELECT MONTH(planned_publish_date) AS month_num, COUNT(*) AS total
+		FROM `tabContent Item`
+		{where_str}
+		AND planned_publish_date IS NOT NULL
+		GROUP BY MONTH(planned_publish_date)
+		""" if where_str else """
+		SELECT MONTH(planned_publish_date) AS month_num, COUNT(*) AS total
+		FROM `tabContent Item`
+		WHERE planned_publish_date IS NOT NULL
+		GROUP BY MONTH(planned_publish_date)
+		""",
+		params,
+		as_dict=True,
+	):
+		monthly_trend[int(row.month_num)] = row.total
 
 	# Active options for filter dropdowns
 	calendars = frappe.get_all("Content Calendar", fields=["name", "status", "from_date", "to_date"], order_by="creation desc")
@@ -1236,6 +1412,7 @@ def trigger_ai_copilot(docname):
 		frappe.throw(_("Content Item {0} not found.").format(docname), frappe.DoesNotExistError)
 
 	doc = frappe.get_doc("Content Item", docname)
+	_validate_ai_copilot_context(doc, "Writer")
 	user = (frappe.session.user or "").lower()
 	assigned = (doc.assigned_to or "").lower()
 	roles = frappe.get_roles(user)
@@ -1276,28 +1453,19 @@ def trigger_ai_copilot(docname):
 			frappe.ValidationError
 		)
 
-	print(f"\n================================================================================", flush=True)
-	print(f"🎯 [COPILOT API TRIGGERED] Content Item: {docname} | Initiated by: {user} (Writer Review)", flush=True)
-	print(f"================================================================================\n", flush=True)
+	from oda_marketing.oda_marketing.ai_engine.runner import enqueue_ai_review
 
-	from oda_marketing.oda_marketing.ai_engine.runner import run_ai_review
-	try:
-		run_ai_review(docname=docname, review_type="Writer")
-	except Exception as e:
-		frappe.log_error(f"AI Copilot execution error: {str(e)}")
-		print(f"\n❌ [AI REVIEW EXECUTION ERROR] {str(e)}\n", flush=True)
-		raise
-
-	return frappe.get_doc("Content Item", docname)
-
+	enqueue_ai_review(docname, review_type="Writer", requested_by=frappe.session.user)
+	return {"queued": True, "docname": docname}
 
 @frappe.whitelist()
 def trigger_reviewer_copilot(docname, instructions=None):
-	"""Reviewer-triggered Copilot review with custom instructions via Immediate Execution."""
+	"""Queue a Reviewer-triggered Copilot review with custom instructions."""
 	if not frappe.db.exists("Content Item", docname):
 		frappe.throw(_("Content Item {0} not found.").format(docname), frappe.DoesNotExistError)
 
 	doc = frappe.get_doc("Content Item", docname)
+	_validate_ai_copilot_context(doc, "Reviewer")
 	user = (frappe.session.user or "").lower()
 	assigned = (doc.assigned_to or "").lower()
 	reviewer = (doc.reviewer_technical or "").lower()
@@ -1347,27 +1515,36 @@ def trigger_reviewer_copilot(docname, instructions=None):
 			frappe.ValidationError
 		)
 
-	# Store reviewer instructions on the document
+	from oda_marketing.oda_marketing.ai_engine.runner import enqueue_ai_review
+
 	if instructions:
 		doc.db_set("reviewer_copilot_instructions", instructions, update_modified=False)
 
-	print(f"\n================================================================================", flush=True)
-	print(f"🎯 [COPILOT API TRIGGERED] Content Item: {docname} | Initiated by: {user} (Reviewer Review)", flush=True)
-	if instructions:
-		print(f"📝 Reviewer Instructions: {instructions}", flush=True)
-	print(f"================================================================================\n", flush=True)
-
-	from oda_marketing.oda_marketing.ai_engine.runner import run_ai_review
-	try:
-		run_ai_review(docname=docname, reviewer_instructions=instructions, review_type="Reviewer")
-	except Exception as e:
-		frappe.log_error(f"Reviewer Copilot execution error: {str(e)}")
-		print(f"\n❌ [REVIEWER AI EXECUTION ERROR] {str(e)}\n", flush=True)
-		raise
-
-	return frappe.get_doc("Content Item", docname)
+	enqueue_ai_review(
+		docname,
+		review_type="Reviewer",
+		reviewer_instructions=instructions,
+		requested_by=frappe.session.user,
+	)
+	return {"queued": True, "docname": docname}
 
 
+def _validate_ai_copilot_context(doc, review_type):
+	if not doc.has_permission("read"):
+		frappe.throw(_("You do not have permission to read this Content Item."), frappe.PermissionError)
+
+	state = getattr(doc, "workflow_state", None) or getattr(doc, "status", None) or "Planned"
+	allowed_states = {
+		"Writer": {"Briefed", "In Progress", "In Revision"},
+		"Reviewer": {"In Review"},
+	}
+	if state not in allowed_states[review_type]:
+		frappe.throw(
+			_("The {0} Copilot review is not available while the item is in {1}.").format(
+				review_type, state
+			),
+			frappe.PermissionError,
+		)
 
 
 @frappe.whitelist()
@@ -1382,4 +1559,3 @@ def get_ai_copilot_status():
 		}
 	except Exception:
 		return {"enable_ai_copilot": 0, "max_writer_copilot_reviews_per_item": 2, "max_reviewer_copilot_reviews_per_item": 2}
-

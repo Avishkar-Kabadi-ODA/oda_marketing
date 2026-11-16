@@ -173,7 +173,7 @@
    "fieldtype": "Select",
    "label": "AI LLM Provider / Architecture",
    "mandatory_depends_on": "eval:doc.enable_ai_copilot",
-   "options": "APIM Gateway\nOpenAI\nGoogle Gemini\nAnthropic\nCustom"
+   "options": "APIM Gateway\nOpenAI\nAnthropic\nCustom"
   },
   {
    "depends_on": "eval:doc.enable_ai_copilot",

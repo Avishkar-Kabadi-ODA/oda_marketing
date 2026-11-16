@@ -11,8 +11,8 @@ def has_app_permission(user=None):
 	if user == "Administrator":
 		return True
 	roles = frappe.get_roles(user)
-	allowed = {"System Manager", "Marketing Lead", "Desk User", "Employee", "All"}
-	return bool(allowed & set(roles)) or frappe.session.user == user
+	allowed = {"System Manager", "Marketing Lead", "Desk User", "Employee"}
+	return bool(allowed & set(roles))
 
 
 def get_default_publisher():
@@ -20,6 +20,20 @@ def get_default_publisher():
 		return frappe.db.get_single_value("Marketing Settings", "default_publisher")
 	except Exception:
 		return None
+
+
+def is_content_item_publisher(user, doc):
+	user_lower = (user or "").lower()
+	if user_lower and user_lower == (get_default_publisher() or "").lower():
+		return True
+	if not doc or not getattr(doc, "content_type", None):
+		return False
+	publisher = frappe.db.get_value(
+		"Content Item Option",
+		doc.content_type,
+		"default_publisher",
+	)
+	return bool(publisher and user_lower == publisher.lower())
 
 
 def safe_escape(val):
@@ -50,7 +64,18 @@ def get_content_item_permission_query_conditions(user=None):
 
 	user_esc = safe_escape(user_lower)
 	# Non-leads can ONLY see items assigned to them or where they are the reviewer, AND only once moved out of 'Planned' state
-	return f"((LOWER(`tabContent Item`.assigned_to) = {user_esc} AND IFNULL(`tabContent Item`.workflow_state, 'Planned') != 'Planned') OR (LOWER(`tabContent Item`.reviewer_technical) = {user_esc} AND IFNULL(`tabContent Item`.workflow_state, 'Planned') != 'Planned'))"
+	return f"""(
+		(LOWER(`tabContent Item`.assigned_to) = {user_esc} AND IFNULL(`tabContent Item`.workflow_state, 'Planned') != 'Planned')
+		OR (LOWER(`tabContent Item`.reviewer_technical) = {user_esc} AND IFNULL(`tabContent Item`.workflow_state, 'Planned') != 'Planned')
+		OR (
+			IFNULL(`tabContent Item`.workflow_state, 'Planned') IN ('Approved', 'Published')
+			AND EXISTS (
+				SELECT 1 FROM `tabContent Item Option`
+				WHERE `tabContent Item Option`.name = `tabContent Item`.content_type
+				AND LOWER(`tabContent Item Option`.default_publisher) = {user_esc}
+			)
+		)
+	)"""
 
 
 def has_content_item_permission(doc, ptype="read", user=None):
@@ -75,6 +100,11 @@ def has_content_item_permission(doc, ptype="read", user=None):
 	if ptype in ["delete", "create"]:
 		return False
 
+	if doc and not isinstance(doc, str):
+		state = getattr(doc, "workflow_state", None) or getattr(doc, "status", None) or "Planned"
+		if state in ("Approved", "Published") and is_content_item_publisher(user, doc):
+			return ptype in ("read", "write", "email", "print")
+
 	# If doc is None or a string (DocType-level permission check), allow baseline read/write for Desk Users
 	if not doc or isinstance(doc, str):
 		return True
@@ -96,5 +126,3 @@ def has_content_item_permission(doc, ptype="read", user=None):
 def validate_user_marketing_roles(doc, method=None):
 	"""No-op: Users can hold Marketing Lead, Technical Reviewer, or multiple roles simultaneously."""
 	pass
-
-

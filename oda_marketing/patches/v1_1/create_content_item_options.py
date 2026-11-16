@@ -64,7 +64,7 @@ def execute():
 		if pa and not frappe.db.exists("Content Item Option", pa):
 			frappe.get_doc({
 				"doctype": "Content Item Option",
-				"option_type": "Practice Area",
+				"option_type": "Industry Domain",
 				"option_label": pa,
 				"is_active": 1,
 				"sort_order": 99

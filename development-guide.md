@@ -2,6 +2,9 @@
 
 Welcome to the **ODA Marketing** developer guide. This document provides step-by-step instructions for developers and administrators on how to extend the application, create new fields, build new DocTypes, link fields, and maintain data consistency across Frappe environments.
 
+The app currently targets **Frappe Framework 16**. Check installed Frappe source
+before relying on framework APIs, especially when updating a supported version.
+
 ---
 
 ## 1. Prerequisites & Developer Mode
@@ -151,12 +154,24 @@ git pull origin main
 # 2. Sync database schema changes with JSON definitions
 bench --site marketing.localhost migrate
 
-# 3. (Optional) Run setup fixtures to re-seed default data & sidebars
+# 3. (Optional) Create any missing defaults without replacing existing customizations
 bench --site marketing.localhost execute oda_marketing.setup_fixtures.run_setup
 
-# 4. Run automated test suite to ensure clean build
+# 4. Run focused regression suites
 bench --site marketing.localhost run-tests --module oda_marketing.tests.test_demo_script
+bench --site marketing.localhost run-tests --module oda_marketing.oda_marketing.tests.test_permissions_and_features
+bench --site marketing.localhost run-tests --module oda_marketing.oda_marketing.tests.test_ai_agent
+bench --site marketing.localhost run-tests --module oda_marketing.oda_marketing.tests.test_content_item_sla
 ```
+
+`bench migrate` runs the app's forward patches and `after_migrate` setup hook.
+Setup is additive: it creates missing options/templates/workflow/dashboard defaults
+and preserves existing prompts and administrator customizations. Schema/data changes
+must use a forward patch when existing records need transformation.
+
+Database tests must use `FrappeTestCase` and transaction rollback. Never call
+`run_setup()` from test setup, delete site-wide records, or commit test transactions.
+Run tests on a development/test site rather than a production site.
 
 ---
 
@@ -167,3 +182,9 @@ bench --site marketing.localhost run-tests --module oda_marketing.tests.test_dem
 - [x] **Use `snake_case` for fieldnames** (`assigned_to`, `planned_publish_date`).
 - [x] **Commit after every DocType edit** so JSON schema updates are version-controlled.
 - [x] **Run `bench migrate` after pulling Git updates**.
+- [x] **Preserve the single custom role**: derive writer/reviewer identity from
+  `assigned_to` and `reviewer_technical`; do not add database roles for them.
+- [x] **Keep server-side checks authoritative**: client scripts are not permission
+  boundaries; retain Planned-state privacy and AI field integrity checks.
+- [x] **Update tests, `memory/`, and root `FLOW_DIAGRAM.txt`** for architectural,
+  schema, or functional changes.

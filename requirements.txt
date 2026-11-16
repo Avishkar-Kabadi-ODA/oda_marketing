@@ -1,2 +1,3 @@
 # Application requirements
 pypdf>=3.0.0
+pydantic-ai-slim[openai,anthropic]==2.66.0

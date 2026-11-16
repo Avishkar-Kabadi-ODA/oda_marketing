@@ -17,12 +17,11 @@ def get_secret(var_name, default=None):
 			val = get_decrypted_password("Env Variable", var_name, fieldname="value")
 			if val:
 				return val
-		except Exception:
-			pass
-		# Fallback to direct field value if not encrypted as password
-		val = frappe.db.get_value("Env Variable", var_name, "value")
-		if val:
-			return val
+		except Exception as exc:
+			frappe.log_error(
+				title="LLM secret decryption failed",
+				message=f"Env Variable {var_name}: {type(exc).__name__}",
+			)
 
 	return os.environ.get(var_name, default)
 

@@ -1,180 +1,125 @@
-========================================================================================================================
-                                     ODA MARKETING OPERATIONS & CONTENT GOVERNANCE ENGINE
-                                            COMPLETE SYSTEM & WORKFLOW FLOW DIAGRAM
-========================================================================================================================
+ODA MARKETING - CURRENT WORKFLOW AND BACKGROUND FLOWS
+====================================================
 
-+----------------------------------------------------------------------------------------------------------------------+
-| 1. ROLES & PERMISSION ARCHITECTURE                                                                                   |
-+----------------------------------------------------------------------------------------------------------------------+
+ROLES
+-----
+Custom app role: Marketing Lead
+Standard roles: Desk User, Employee, System Manager
+Document roles: Writer = doc.assigned_to; Reviewer = doc.reviewer_technical
+Format publisher: User configured on a Content Item Option
 
-  [ Custom App Role ] : Marketing Lead (Has Desk Access, Manages Calendars, Options, Settings & Dashboard)
-  [ Standard Roles  ] : Desk User / Employee (Standard Frappe users with Desk access)
-  
-  [ Document-Level Dynamic Role Resolution ] (Computed at runtime per deliverable):
-    * If session.user == doc.assigned_to        ==> Content Writer (Can draft, edit Due Date, run Writer Copilot)
-    * If session.user == doc.reviewer_technical ==> Technical Reviewer (Can review, add feedback, run Reviewer Copilot)
-    * If session.user == Marketing Lead / Admin ==> Marketing Lead (Oversees, issues briefs, publishes)
-    * Self-Review Prevention                    ==> If a Lead is in assigned_to, they act strictly as a Writer on that doc.
+There are no database roles named Writer or Reviewer. The default publisher setting
+is restricted by the Marketing Settings picker to Marketing Lead/System Manager/
+Administrator. An assigned Lead is treated as the writer on that item for
+self-review and self-publication checks.
 
 
-+----------------------------------------------------------------------------------------------------------------------+
-| 2. END-TO-END DELIVERABLE LIFECYCLE & STATE MACHINE                                                                  |
-+----------------------------------------------------------------------------------------------------------------------+
+CONTENT WORKFLOW
+----------------
 
-  +------------------------------------------------------------------------------------------------------------------+
-  | [ STATE 1: PLANNED ]                                                                                             |
-  | - Created by : Marketing Lead / System Manager                                                                   |
-  | - Visibility : PRIVACY LOCKED. Hidden from assigned writer & reviewer until briefed.                            |
-  | - Fields set : Title, Format, Industry Domain, Due Date, Planned Publish Date, Assigned Writer, Reviewer.       |
-  | - Metadata   : Writer/Reviewer cannot see or edit.                                                               |
-  +------------------------------------------------------------------------------------------------------------------+
-                                        |
-                                        | Action: "Issue Brief"
-                                        | Triggered by: Marketing Lead / System Manager
-                                        | Hook: Sends "Marketing Writer Notification" email to doc.assigned_to
-                                        v
-  +------------------------------------------------------------------------------------------------------------------+
-  | [ STATE 2: BRIEFED ]                                                                                             |
-  | - Visibility : Now visible in Desk to Assigned Writer & Reviewer.                                                |
-  | - Lock state : Attachments and notes are still READ-ONLY until work officially starts.                           |
-  | - Next step  : Writer reviews brief and clicks "Start Work".                                                     |
-  +------------------------------------------------------------------------------------------------------------------+
-                                        |
-                                        | Action: "Start Work" (renamed from "Accept Brief")
-                                        | Triggered by: Assigned Content Writer (or Lead)
-                                        | Auto-stamp  : Sets `doc.brief_accepted_on` = now_datetime()
-                                        v
-  +------------------------------------------------------------------------------------------------------------------+
-  | [ STATE 3: IN PROGRESS ]                                                                                         |
-  | - Drafting   : Writer uploads Primary Draft (`content_file_1`) and Supporting Assets (`content_file_2`, `_3`).    |
-  |                (Allowed formats: Markdown .md, Images .png/.svg/.jpeg/.jpg/.webp, or Web Links. No PDF/DOCX).     |
-  | - Notes      : Writer writes Working Notes / Draft Copy in `notes`.                                              |
-  | - Due Date   : Writer CANNOT modify `due_date` (Lead-only metadata).                                            |
-  |                                                                                                                  |
-  | + - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -+ |
-  | : OPTIONAL: AI COPILOT WRITER REVIEW (Triggered manually via Action Button or API: `trigger_ai_copilot`)        : |
-  | : Requirement: At least one Markdown (.md / .markdown) attachment must be present.                             : |
-  | : Quota Check: writer_copilot_review_count < max_writer_copilot_reviews_per_item (Default: 2)                   : |
-  | :                                                                                                              : |
-  | :   [STAGE 1: Prompt Generator Subagent]                                                                       : |
-  | :   - Builds prompt from Marketing Settings `subagent_meta_prompt` with Title, Format, Domain, Brief.          : |
-  | :   - Injects Format Expectations & Industry Domain guidelines dynamically.                                   : |
-  | :   - Calls LLM (Dual Header: Authorization: Bearer + api-key) to produce custom System Prompt.               : |
-  | :   - (Fallback to deterministic template if LLM times out or is offline).                                     : |
-  | :                                                                                                              : |
-  | :   [STAGE 2: Primary Evaluator Agent]                                                                         : |
-  | :   - Evaluates Markdown Draft Text & Notes against custom System Prompt (Images referenced by name only).      : |
-  | :   - Outputs JSON: overall_score (0-100), key_strengths, critical_flaws, actionable_feedback.                 : |
-  | :   - Writes to doc: ai_score, ai_copilot_feedback, ai_review_status = 'Completed'.                            : |
-  | :   - (NON-BLOCKING: Informational only; does not alter workflow state).                                       : |
-  | + - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -+ |
-  +------------------------------------------------------------------------------------------------------------------+
-                                        |
-                                        | Action: "Submit for Review"
-                                        | Triggered by: Assigned Content Writer (or Lead)
-                                        | Validation  : `content_file_1` is MANDATORY (Markdown/Image/URL only).
-                                        | Hook        : Sends "Marketing Reviewer Notification" email to reviewer.
-                                        v
-  +------------------------------------------------------------------------------------------------------------------+
-  | [ STATE 4: IN REVIEW ]                                                                                           |
-  | - Evaluation : Technical Reviewer inspects draft files, notes, and technical specs.                              |
-  | - Instructions: Reviewer can enter `reviewer_instructions_for_copilot` to focus AI on specific technical areas.  |
-  |                                                                                                                  |
-  | + - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -+ |
-  | : OPTIONAL: AI COPILOT REVIEWER AUDIT (Triggered manually via Action Button or API)                             : |
-  | : Quota Check: reviewer_copilot_review_count < max_reviewer_copilot_reviews_per_item (Default: 2)               : |
-  | : Runs 2-stage subagent pipeline incorporating Reviewer's custom instructions into prompt.                     : |
-  | + - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -+ |
-  +------------------------------------------------------------------------------------------------------------------+
-                   |                                                                  |
-                   | Action: "Request Changes"                                        | Action: "Approve"
-                   | Triggered by: Reviewer / Lead                                    | Triggered by: Reviewer / Lead
-                   | Mandatory   : `revision_feedback_notes`                          | Hook: Sends "Marketing Publisher
-                   | Hook        : Sends notification to Writer                       |       Notification" to Publisher
-                   v                                                                  v
-  +--------------------------------------------------+              +------------------------------------------------+
-  | [ STATE 5: IN REVISION ]                         |              | [ STATE 6: APPROVED ]                          |
-  | - Writer inspects `revision_feedback_notes`.     |              | - Deliverable meets technical/brand quality.   |
-  | - Writer updates attachments & notes.            |              | - Ready for live publication.                  |
-  +--------------------------------------------------+              +------------------------------------------------+
-                   |                                                                  |
-                   | Action: "Resubmit Draft"                                         | Action: "Publish"
-                   | Triggered by: Assigned Writer                                    | Triggered by: Marketing Lead /
-                   | Transition  : Moves back to [ IN PROGRESS ]                      |               Publisher
-                   v                                                                  | Validation  : `published_url` is
-         (Returns to In Progress)                                                     |               MANDATORY.
-                                                                                      | Hook        : Sends "Marketing Published
-                                                                                      |               Notification" to Writer.
-                                                                                      v
-                                                                    +------------------------------------------------+
-                                                                    | [ STATE 7: PUBLISHED ]                         |
-                                                                    | - Terminal live state.                         |
-                                                                    | - Asset URL permanently recorded.              |
-                                                                    +------------------------------------------------+
+  Marketing Lead / System Manager
+       |
+       | Create item (Planned)
+       | Planned items hidden from non-leads
+       v
+  [ PLANNED ]
+       |
+       | Issue Brief
+       v
+  [ BRIEFED ] -- assigned writer: Start Work; stamp brief_accepted_on
+       |
+       v
+  [ IN PROGRESS ] -- writer updates draft and notes
+       |              Due Date remains lead-controlled
+       | Submit for Review (primary draft required)
+       v
+  [ IN REVIEW ] -- assigned reviewer: Approve or Request Changes
+       |                                       |
+       | Approve                               | Request Changes
+       v                                       v
+  [ APPROVED ]                            [ IN REVISION ]
+       |                                       |
+       | Lead / eligible format publisher      | assigned writer:
+       | Publish (published_url required)      | Resubmit Draft
+       v                                       |
+  [ PUBLISHED ]                                +--> IN PROGRESS
+
+`status` is synchronized with `workflow_state` during document validation.
+Allowed workflow roles are real Frappe roles; Content Item server checks further
+restrict each action to the assigned writer/reviewer, Lead, or eligible publisher.
+Writers cannot review or publish their own item.
 
 
-+----------------------------------------------------------------------------------------------------------------------+
-| 3. AUTOMATED BACKGROUND JOBS, REMINDERS & SLA MONITORING                                                             |
-+----------------------------------------------------------------------------------------------------------------------+
+OPTIONAL AI COPILOT
+-------------------
 
-  +------------------------------------------------------------------------------------------------------------------+
-  | DAILY CRON SCHEDULER: `oda_marketing.api.daily_sla_check_and_reminders`                                          |
-  +------------------------------------------------------------------------------------------------------------------+
-         |
-         +---> 1. SLA Due Date Reminder (`reminder_1_days_before`):
-         |        - Trigger: Today == due_date - reminder_days (e.g. 3 days before due date).
-         |        - State  : Active items in [Briefed, In Progress, In Revision].
-         |        - Action : Sends "Marketing Due Date Reminder" email template to assigned writer.
-         |
-         +---> 2. Overdue Auto-Escalation & Late Flag:
-         |        - Trigger: Today > due_date AND state NOT IN [Approved, Published].
-         |        - Action : Sets `doc.risk_flag` = "Late" (if enable_auto_overdue_flag is active).
-         |        - Action : Sends "Marketing Overdue Alert" email to Marketing Lead & Writer.
-         |
-         +---> 3. Auto-Overdue Status Sync:
-                  - Syncs deliverable health metrics directly into Marketing Dashboard Executive KPI Cards.
+Writer action: Briefed / In Progress / In Revision
+Reviewer action: In Review
+       |
+       | Server checks read permission, assignment/lead identity, state,
+       | Markdown draft, enablement, and role-specific review limit
+       v
+  Enqueue after transaction commit (long queue, 600-second job timeout)
+       |
+       v
+  [ Queued ] -> [ In Progress ]
+       |              |
+       |              +--> Stage 1: prompt-generation subagent
+       |              |       deterministic fallback on prompt-generation failure
+       |              +--> Stage 2: evaluator
+       |                      |
+       |                      +--> [ Completed ]: save score, feedback, history
+       |                      +--> [ Failed ]: show retryable error
+       |
+       +--> Hourly recovery marks active jobs older than 30 minutes Failed,
+            invalidates their token, and notifies the requester
+
+Realtime stage updates are sent to the requester; the client reloads the Content
+Item after completion. Role-scoped serialization keeps writer/reviewer feedback,
+history, and reviewer instructions separated. AI results are informational only:
+they never alter a workflow state.
+
+LLM requests send both `Authorization: Bearer <key>` and `api-key: <key>`.
+Supported live clients are OpenAI-compatible endpoints and Anthropic. Network and
+provider failures are bounded and surfaced; evaluation failures do not create a
+success-shaped review row.
 
 
-+----------------------------------------------------------------------------------------------------------------------+
-| 4. AI COPILOT 2-STAGE SUBAGENT EXECUTION PIPELINE                                                                    |
-+----------------------------------------------------------------------------------------------------------------------+
+HOURLY SLA JOB
+--------------
 
-           [ Content Item Metadata (Title, Format, Domain, Brief, Reviewer Instructions) ]
-                                                   |
-                                                   v
-   +-----------------------------------------------------------------------------------------------+
-   | STAGE 1: PROMPT GENERATOR SUBAGENT (prompt_subagent.py)                                       |
-   | - Pulls `subagent_meta_prompt` template from Marketing Settings                               |
-   | - Injects deliverable-specific criteria, format guidelines, and domain requirements           |
-   | - Calls LLM API endpoint:                                                                     |
-   |     * Headers: {"Authorization": "Bearer <key>", "api-key": "<key>"}                          |
-   |     * Providers supported: NVIDIA NIM, OpenAI, Anthropic, Azure APIM, Mock Heuristic          |
-   | - Generates customized, production-grade System Prompt for Evaluator Agent                    |
-   | - (Auto-fallback to deterministic prompt template on network/timeout exception)               |
-   +-----------------------------------------------------------------------------------------------+
-                                                   |
-                                                   v  (Tailored System Prompt)
-   +-----------------------------------------------------------------------------------------------+
-   | STAGE 2: PRIMARY EVALUATOR AGENT (evaluator_agent.py)                                         |
-   | - Consolidates working notes (`doc.notes`) and primary draft text (`doc.content_file_1`)       |
-   | - Applies Stage 1 System Prompt with temperature 0.2                                          |
-   | - Outputs structured JSON schema:                                                             |
-   |     {                                                                                         |
-   |       "overall_score": 92,                                                                    |
-   |       "technical_accuracy_score": 90,                                                         |
-   |       "clarity_score": 95,                                                                    |
-   |       "structure_score": 90,                                                                  |
-   |       "verdict": "PASS",                                                                      |
-   |       "key_strengths": ["Clear multi-cloud architecture...", "Proper terminology..."],        |
-   |       "critical_flaws": [],                                                                   |
-   |       "actionable_feedback": "Detailed markdown recommendations for Content Writer..."       |
-   |     }                                                                                         |
-   | - Writes results to `tabContent Item`:                                                        |
-   |     * `ai_score` = 92                                                                         |
-   |     * `ai_review_status` = 'Completed'                                                        |
-   |     * `ai_copilot_feedback` = Formatted Markdown Summary                                      |
-   +-----------------------------------------------------------------------------------------------+
-                                                   |
-                                                   v
-     [ Informational Quality Feedback Displayed on Deliverable Form View in Frappe Desk ]
-========================================================================================================================
+  hooks.py: send_overdue_sla_notifications
+       |
+       +--> If automatic flagging is enabled:
+       |      open items with due_date before today -> Late
+       |      resolved/no-longer-overdue items -> clear stale Late flag
+       |
+       +--> During business hours [start, end):
+              due-date reminders at configured/item offsets
+              overdue notices for Late items
+              one reminder/notice per item per date
+              recipients: assigned writer and reviewer
+
+The site timezone determines today/current hour. Default business hours are
+09:00-19:00, with the end hour excluded. `last_sla_reminder_sent_on` and
+`last_overdue_notified_on` prevent hourly duplicates.
+
+
+SUPPORTING SURFACES
+-------------------
+
+  Content Item Option (Format / Industry Domain)
+       +--> format dropdowns and optional format publisher
+  Content Calendar
+       +--> date-range validation and dashboard filters
+  Marketing Settings
+       +--> email templates, SLA settings, AI provider/limits/threshold
+  Env Variable
+       +--> encrypted provider values, permission-checked secret access
+  Dashboard and Kanban
+       +--> pipeline reporting; dashboard metrics are aggregated in SQL
+  CSV/XLSX importer
+       +--> Frappe File record -> confined site path -> Planned Content Items
+
+Schema and data migrations are forward-only patches. `after_migrate` setup is
+additive and does not replace existing workflows, templates, prompts, or dashboards.

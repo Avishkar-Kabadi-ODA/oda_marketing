@@ -1,132 +1,89 @@
 # ODA Marketing
 
-**Enterprise Marketing Operations & Content Governance Engine for Frappe Framework v15/v16.**
+Enterprise marketing operations and content governance for **Frappe Framework 16**.
 
-Built for **Optimum Data Analytics (ODA)** to govern deliverable lifecycles, enforce multi-stage technical reviews, provide autonomous 2-stage AI Copilot evaluations, and automate publisher notifications and SLA reminders.
+The app manages deliverables from planning through publication using one custom role,
+**Marketing Lead**. Writers and reviewers are regular Desk users assigned on each
+Content Item; their document-level responsibilities are derived from `assigned_to`
+and `reviewer_technical`, not separate database roles.
 
----
+## Core behavior
 
-## Key Capabilities
+- Seven workflow states: `Planned`, `Briefed`, `In Progress`, `In Review`,
+  `In Revision`, `Approved`, and `Published`.
+- Non-leads cannot see `Planned` items. Assigned writers and reviewers can access
+  their items after briefing; format publishers receive access only to their
+  `Approved`/`Published` items.
+- Writers draft and resubmit; reviewers approve or request changes. A writer cannot
+  review or publish their own item. Marketing Leads and System Managers administer
+  the workflow. Publishing requires `published_url`.
+- `due_date` cannot be later than `planned_publish_date`; changing workflow state
+  keeps `status` synchronized with `workflow_state`.
+- The hourly scheduler recalculates overdue flags and sends deduplicated due-date
+  reminders and overdue emails during configured business hours.
+- The AI Copilot runs asynchronously through prompt generation and evaluation.
+  `Not Started`, `Queued`, `In Progress`, `Completed`, and `Failed` are informational
+  review statuses; a score never blocks or changes workflow state.
+- Attachments are resolved through Frappe File records under site file storage and
+  are size-limited. Import accepts CSV/XLSX File records.
+- Dashboard metrics use database aggregations and support calendar, date, format,
+  domain, and risk filters.
 
-* **7-Stage Governance Workflow:** `Planned → Briefed → In Progress → In Review → In Revision → Approved → Published`
-* **Single Custom App Role Paradigm:** Eliminates redundant database roles by defining a single custom role (**`Marketing Lead`**). Content Writers and Technical Reviewers are standard Frappe **`Desk User`**s resolved dynamically at runtime per deliverable.
-* **Autonomous 2-Stage AI Copilot:**
-  - **Stage 1 (Prompt Generator Subagent):** Generates domain-tailored System Prompts based on deliverable metadata and reviewer instructions.
-  - **Stage 2 (Primary Evaluator Agent):** Evaluates draft copy and attachments, returning JSON scores, strengths, and actionable feedback.
-  - **Interoperable Dual Headers:** Full support for NVIDIA NIM, OpenAI, Anthropic, Azure APIM, and custom gateways.
-  - **Non-Blocking & Informational:** AI reviews never halt or auto-route workflow transitions.
-* **Planned-State Privacy:** Deliverables in `Planned` state are hidden from non-leads until officially briefed.
-* **Automated Background Reminders & SLA Escalation:** Daily scheduler tracks approaching due dates and automatically flags overdue deliverables as `Late`.
-* **Visual Kanban Board & Executive Dashboard:** Real-time visibility into the content pipeline across all 7 workflow stages.
+## AI provider configuration
 
----
+Configure the provider, endpoint, model, and API-key/endpoint variable names in
+**Marketing Settings**. Store secrets in **Env Variable**; secret reads require
+DocType read permission. Supported live clients are OpenAI-compatible endpoints
+(including configured APIM/NVIDIA NIM endpoints) and Anthropic. Both send
+`Authorization: Bearer <key>` and `api-key: <key>`. Unsupported providers fail
+explicitly; prompt generation has a deterministic fallback for network/provider
+errors.
 
-## Deliverable Lifecycle & State Transitions
-
-See [`FLOW_DIAGRAM.txt`](FLOW_DIAGRAM.txt) for the full ASCII flow diagram.
-
-```
-Marketing Lead                 Content Writer (Desk User)       Technical Reviewer (Desk User)
-──────────────                 ──────────────────────────       ──────────────────────────────
-Create Deliverable (Planned)
-  │ (Issue Brief)
-  ▼
-Briefed ─────────────────────► Start Work (In Progress)
-                               Attach Draft & Notes
-                               (Optional Writer AI Copilot)
-                               Submit for Review ─────────────► In Review
-                                                                (Optional Reviewer AI Copilot)
-                                                                Approve ────────────► Approved
-                                                                Request Changes ────► In Revision
-                               Resubmit Draft ◄─────────────────────────────────────────┘
-                               (Moves to In Progress)
-Live Publication ◄───────────── (Approved)
-(Mandatory live URL)
-```
-
-| State | Action | Next State | Action Performed By | Key Validations & Side Effects |
-| :--- | :--- | :--- | :--- | :--- |
-| **`Planned`** | `Issue Brief` | `Briefed` | Marketing Lead / System Mgr | Privacy locked. Sends notification to Assigned Writer. |
-| **`Briefed`** | `Start Work` | `In Progress` | Assigned Writer | Unlocks attachments; stamps `brief_accepted_on`. |
-| **`In Progress`** | `Submit for Review` | `In Review` | Assigned Writer | Requires `content_file_1` (Primary Draft). Alerts Reviewer. |
-| **`In Review`** | `Approve` | `Approved` | Assigned Reviewer / Lead | Confirms technical & brand quality. Alerts Publisher. |
-| **`In Review`** | `Request Changes` | `In Revision` | Assigned Reviewer / Lead | Requires `revision_feedback_notes`. Alerts Writer. |
-| **`In Revision`** | `Resubmit Draft` | `In Progress` | Assigned Writer | Resubmits updated draft back to drafting state. |
-| **`Approved`** | `Publish` | `Published` | Marketing Lead / Publisher | Requires `published_url`. Terminal live asset state. |
-
----
-
-## Role & Permission Matrix
-
-| Permission Area | Marketing Lead | Assigned Content Writer (`Desk User`) | Assigned Reviewer (`Desk User`) | Other Users |
-| :--- | :---: | :---: | :---: | :---: |
-| **Create / Delete Deliverables** | ✅ | ❌ | ❌ | ❌ |
-| **View Planned Items** | ✅ | ❌ (Hidden until Briefed) | ❌ (Hidden until Briefed) | ❌ |
-| **View Briefed / Active Items** | ✅ | ✅ | ✅ | ❌ |
-| **Edit Deliverable Metadata** | ✅ | ❌ | ❌ | ❌ |
-| **Edit Due Date** | ✅ | ✅ (In Progress / Revision) | ❌ | ❌ |
-| **Edit Draft Attachments & Notes** | ✅ | ✅ (In Progress / Revision) | ❌ | ❌ |
-| **Run Writer AI Copilot Review** | ✅ | ✅ (Up to quota) | ❌ | ❌ |
-| **Run Reviewer AI Copilot Audit** | ✅ | ❌ | ✅ (Up to quota) | ❌ |
-| **Approve / Request Changes** | ✅ | ❌ (Anti-self-review) | ✅ | ❌ |
-| **Publish Live** | ✅ | ❌ | ❌ | ❌ |
-
----
-
-## Quick Installation & Setup
+## Install and migrate
 
 ```bash
-# 1. Fetch the app into your bench
 bench get-app https://github.com/OptimumDataAnalytics/oda_marketing.git --branch main
-
-# 2. Install on target site
 bench --site marketing.localhost install-app oda_marketing
-
-# 3. Run migrations and setup fixtures
 bench --site marketing.localhost migrate
-
-# 4. Build assets and restart
-bench build && bench restart
+bench build
+bench restart
 ```
 
----
+Migrations add fields and apply the forward patch in `patches.txt`. Fixture setup is
+additive: it creates missing defaults and does not replace existing workflows,
+templates, prompts, boards, dashboards, or sidebar customizations.
 
-## Configuration & Environment Variables
+## Tests
 
-1. Open **Marketing Settings** (`/app/marketing-settings`) in Frappe Desk:
-   - Configure **Default Publisher** and Email Notification Switches.
-   - Configure **AI Copilot** (Provider: `APIM Gateway`, `OpenAI`, `Anthropic`, `Azure OpenAI`).
-   - For **NVIDIA NIM** or OpenAI compatible endpoints:
-     - Provider: `OpenAI` or `APIM Gateway`
-     - Base URL: `https://integrate.api.nvidia.com/v1`
-     - API Key: `nvapi-...`
-2. Configure **Marketing Env Variables** (`/app/marketing-env-variable`) for AES-encrypted secrets.
-
----
-
-## Running Automated Test Suites
-
-The app includes **24 automated unit tests** covering end-to-end multi-stage workflows, role scoping, Planned-state privacy, attachment locking, dual-header LLM connectivity, prompt subagent generation, and SLA overdue tracking:
+Run the app suite:
 
 ```bash
-# Run all app unit tests
 bench --site marketing.localhost run-tests --app oda_marketing
 ```
 
----
+Focused modules:
 
-## System Documentation & Developer Memory
+```bash
+bench --site marketing.localhost run-tests --module oda_marketing.tests.test_demo_script
+bench --site marketing.localhost run-tests --module oda_marketing.oda_marketing.tests.test_permissions_and_features
+bench --site marketing.localhost run-tests --module oda_marketing.oda_marketing.tests.test_ai_agent
+bench --site marketing.localhost run-tests --module oda_marketing.oda_marketing.tests.test_content_item_sla
+```
 
-Persistent architecture and maintenance guides are maintained in the repository:
+Database tests use Frappe test transactions and generated identities. Do not add
+site-wide deletes or explicit commits to test setup.
 
-* [`FLOW_DIAGRAM.txt`](FLOW_DIAGRAM.txt) — Comprehensive ASCII state machine and AI execution diagram.
-* [`memory/PROJECT_OVERVIEW.md`](memory/PROJECT_OVERVIEW.md) — DocType schemas and single-role paradigm.
-* [`memory/WORKFLOW_AND_PERMISSIONS.md`](memory/WORKFLOW_AND_PERMISSIONS.md) — State machine and permission rules.
-* [`memory/AI_COPILOT_ENGINE.md`](memory/AI_COPILOT_ENGINE.md) — 2-stage subagent pipeline and LLM integration.
-* [`memory/TESTING_AND_TROUBLESHOOTING.md`](memory/TESTING_AND_TROUBLESHOOTING.md) — Test suites, gotchas, and resolutions.
-* [`memory/MAINTENANCE_INSTRUCTIONS.md`](memory/MAINTENANCE_INSTRUCTIONS.md) — Agent memory update guidelines.
+## Documentation
 
----
+- [Architecture and operational workflow](./app-architecture-and-flow.md)
+- [State and AI flow diagram](./FLOW_DIAGRAM.txt)
+- [Dashboard guide](./MARKETING_DASHBOARD_GUIDE.md)
+- [Development guide](./development-guide.md)
+- [Project overview memory](./memory/PROJECT_OVERVIEW.md)
+- [Workflow and permissions memory](./memory/WORKFLOW_AND_PERMISSIONS.md)
+- [AI Copilot memory](./memory/AI_COPILOT_ENGINE.md)
+- [Testing and troubleshooting memory](./memory/TESTING_AND_TROUBLESHOOTING.md)
+- [Maintenance instructions](./memory/MAINTENANCE_INSTRUCTIONS.md)
 
 ## License
 
